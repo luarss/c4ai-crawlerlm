@@ -13,6 +13,7 @@ from huggingface_hub import HfApi
 
 # Paths
 TRAIN_CHAT_PATH = Path("data/processed/train_chat.jsonl")
+VAL_CHAT_PATH = Path("data/processed/val_chat.jsonl")
 TEST_CHAT_PATH = Path("data/processed/test_chat.jsonl")
 README_PATH = Path("data/README.md")
 
@@ -27,10 +28,14 @@ def load_jsonl(path: Path) -> list[dict]:
 
 
 def create_dataset() -> DatasetDict:
-    """Create HuggingFace DatasetDict from chat-formatted train/test splits."""
+    """Create HuggingFace DatasetDict from chat-formatted train/val/test splits."""
     print("Loading train split...")
     train_data = load_jsonl(TRAIN_CHAT_PATH)
     print(f"  Loaded {len(train_data)} training examples")
+
+    print("Loading validation split...")
+    val_data = load_jsonl(VAL_CHAT_PATH)
+    print(f"  Loaded {len(val_data)} validation examples")
 
     print("Loading test split...")
     test_data = load_jsonl(TEST_CHAT_PATH)
@@ -38,11 +43,13 @@ def create_dataset() -> DatasetDict:
 
     # Create datasets
     train_dataset = Dataset.from_list(train_data)
+    val_dataset = Dataset.from_list(val_data)
     test_dataset = Dataset.from_list(test_data)
 
     # Create DatasetDict
     dataset_dict = DatasetDict({
         "train": train_dataset,
+        "validation": val_dataset,
         "test": test_dataset,
     })
 

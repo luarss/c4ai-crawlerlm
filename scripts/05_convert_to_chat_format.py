@@ -12,8 +12,10 @@ from tqdm import tqdm
 
 # Paths
 TRAIN_INPUT = Path("data/processed/train.jsonl")
+VAL_INPUT = Path("data/processed/val.jsonl")
 TEST_INPUT = Path("data/processed/test.jsonl")
 TRAIN_OUTPUT = Path("data/processed/train_chat.jsonl")
+VAL_OUTPUT = Path("data/processed/val_chat.jsonl")
 TEST_OUTPUT = Path("data/processed/test_chat.jsonl")
 
 
@@ -91,12 +93,16 @@ def main():
     # Convert train split
     convert_file(TRAIN_INPUT, TRAIN_OUTPUT)
 
+    # Convert validation split
+    convert_file(VAL_INPUT, VAL_OUTPUT)
+
     # Convert test split
     convert_file(TEST_INPUT, TEST_OUTPUT)
 
     print("\n✓ Conversion complete!")
     print(f"\nOutput files:")
     print(f"  - {TRAIN_OUTPUT}")
+    print(f"  - {VAL_OUTPUT}")
     print(f"  - {TEST_OUTPUT}")
 
     # Show example

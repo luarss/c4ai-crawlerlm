@@ -3,10 +3,10 @@
 
 This script will:
 1. Load the golden dataset (data/processed/golden.jsonl)
-2. Split into test (50) and base training examples (remaining)
-3. Generate synthetic variations from base training examples
-4. Scale to target size (e.g., 450 total training examples)
-5. Save train and test splits
+2. Hold out test set (50 examples) - never used for training
+3. Generate synthetic variations from remaining (47 examples) to reach 450 total
+4. Split synthetic into train (400) and validation (50)
+5. Save train, val, and test splits
 
 Augmentation strategies:
 - Structural variations (wrapper divs, nesting depth)
@@ -32,15 +32,15 @@ def load_golden_dataset(path: Path) -> List[Dict]:
         return [json.loads(line) for line in f]
 
 
-def split_dataset(examples: List[Dict], test_size: int = 50) -> tuple:
-    """Split into test and base training examples."""
+def split_test_set(examples: List[Dict], test_size: int = 50) -> tuple:
+    """Split out test set as holdout."""
     shuffled = examples.copy()
     random.shuffle(shuffled)
 
     test_examples = shuffled[:test_size]
-    base_train = shuffled[test_size:]
+    remaining = shuffled[test_size:]
 
-    return base_train, test_examples
+    return remaining, test_examples
 
 
 def add_wrapper_divs(html: str, num_wrappers: int = None) -> str:
@@ -245,10 +245,22 @@ def save_dataset(examples: List[Dict], path: Path, strip_metadata: bool = True):
                 f.write(json.dumps(example) + '\n')
 
 
+def split_train_val(examples: List[Dict], train_size: int = 400, val_size: int = 50) -> tuple:
+    """Split synthetic examples into train and val."""
+    shuffled = examples.copy()
+    random.shuffle(shuffled)
+
+    train_examples = shuffled[:train_size]
+    val_examples = shuffled[train_size:train_size + val_size]
+
+    return train_examples, val_examples
+
+
 def main():
     """Main execution."""
     golden_path = Path("data/processed/golden.jsonl")
     train_path = Path("data/processed/train.jsonl")
+    val_path = Path("data/processed/val.jsonl")
     test_path = Path("data/processed/test.jsonl")
 
     # Load golden dataset
@@ -256,24 +268,32 @@ def main():
     golden_examples = load_golden_dataset(golden_path)
     print(f"Total golden examples: {len(golden_examples)}")
 
-    # Split into test and base training
-    print("\nSplitting dataset...")
-    base_train, test_examples = split_dataset(golden_examples, test_size=50)
-    print(f"Test examples: {len(test_examples)}")
-    print(f"Base training examples: {len(base_train)}")
+    # Step 1: Hold out test set (50 examples)
+    print("\nStep 1: Holding out test set...")
+    remaining, test_examples = split_test_set(golden_examples, test_size=50)
+    print(f"Test holdout: {len(test_examples)} examples")
+    print(f"Remaining for training: {len(remaining)} examples")
 
-    # Generate synthetic training data
-    target_train_size = 450
-    print(f"\nGenerating synthetic training data to reach {target_train_size} examples...")
-    train_examples = generate_synthetic_dataset(base_train, target_train_size)
-    print(f"Total training examples (with synthetic): {len(train_examples)}")
+    # Step 2: Generate synthetic data from remaining examples
+    target_synthetic_size = 450  # Generate 450 total
+    print(f"\nStep 2: Generating {target_synthetic_size} synthetic examples from {len(remaining)} base examples...")
+    synthetic_examples = generate_synthetic_dataset(remaining, target_synthetic_size)
+    print(f"Total synthetic examples: {len(synthetic_examples)}")
+
+    # Step 3: Split synthetic into train (400) and val (50)
+    print(f"\nStep 3: Splitting synthetic into train/val...")
+    train_examples, val_examples = split_train_val(synthetic_examples, train_size=400, val_size=50)
+    print(f"Train: {len(train_examples)} examples")
+    print(f"Validation: {len(val_examples)} examples")
 
     # Save datasets
     print("\nSaving datasets...")
     save_dataset(train_examples, train_path, strip_metadata=True)
+    save_dataset(val_examples, val_path, strip_metadata=True)
     save_dataset(test_examples, test_path, strip_metadata=True)
 
     print(f"✓ Training set: {train_path} ({len(train_examples)} examples)")
+    print(f"✓ Validation set: {val_path} ({len(val_examples)} examples)")
     print(f"✓ Test set: {test_path} ({len(test_examples)} examples)")
 
     # Summary
@@ -281,8 +301,9 @@ def main():
     print("DATASET GENERATION COMPLETE")
     print("="*60)
     print(f"Training examples: {len(train_examples)}")
+    print(f"Validation examples: {len(val_examples)}")
     print(f"Test examples: {len(test_examples)}")
-    print(f"Total examples: {len(train_examples) + len(test_examples)}")
+    print(f"Total examples: {len(train_examples) + len(val_examples) + len(test_examples)}")
 
 
 if __name__ == "__main__":
