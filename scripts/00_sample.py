@@ -105,36 +105,6 @@ def extract_domain(url: str) -> str:
     return parsed.netloc
 
 
-def validate_url(url: str, timeout: int = 10) -> bool:
-    """Check if URL is reachable and returns valid HTML."""
-    try:
-        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
-            response = client.get(url)
-
-            # Check status code
-            if response.status_code != 200:
-                return False
-
-            # Check if content is HTML
-            content_type = response.headers.get('content-type', '').lower()
-            if 'text/html' not in content_type:
-                return False
-
-            # Check if response has some content
-            if len(response.text) < 500:  # Minimum reasonable HTML size
-                return False
-
-            # Check for basic HTML structure
-            html_lower = response.text.lower()
-            if '<html' not in html_lower and '<body' not in html_lower:
-                return False
-
-            return True
-
-    except Exception:
-        return False
-
-
 def fetch_and_validate_single_url(url_data: Dict, timeout: int = 10) -> tuple:
     """Fetch and validate a single URL."""
     url = url_data['url']
