@@ -200,8 +200,18 @@ def select_best_urls(manifest_path: Path, top_n: int = 50) -> List[Dict]:
     eligible = [r for r in results if r['eligible']]
     print(f"Eligible URLs (static, no issues, 4K-128K tokens): {len(eligible)}")
 
+    # Deduplicate by URL (keep highest quality score for each URL)
+    url_to_best = {}
+    for r in eligible:
+        url = r['url']
+        if url not in url_to_best or r['quality_score'] > url_to_best[url]['quality_score']:
+            url_to_best[url] = r
+
+    eligible_deduped = list(url_to_best.values())
+    print(f"After deduplication: {len(eligible_deduped)} unique URLs")
+
     # Sort by quality score
-    eligible_sorted = sorted(eligible, key=lambda x: x['quality_score'], reverse=True)
+    eligible_sorted = sorted(eligible_deduped, key=lambda x: x['quality_score'], reverse=True)
 
     # Select top N
     selected = eligible_sorted[:top_n]
