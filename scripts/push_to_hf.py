@@ -12,8 +12,8 @@ from datasets import Dataset, DatasetDict
 from huggingface_hub import HfApi
 
 # Paths
-TRAIN_PATH = Path("data/processed/train.jsonl")
-TEST_PATH = Path("data/processed/test.jsonl")
+TRAIN_CHAT_PATH = Path("data/processed/train_chat.jsonl")
+TEST_CHAT_PATH = Path("data/processed/test_chat.jsonl")
 README_PATH = Path("data/README.md")
 
 
@@ -27,13 +27,13 @@ def load_jsonl(path: Path) -> list[dict]:
 
 
 def create_dataset() -> DatasetDict:
-    """Create HuggingFace DatasetDict from train/test splits."""
+    """Create HuggingFace DatasetDict from chat-formatted train/test splits."""
     print("Loading train split...")
-    train_data = load_jsonl(TRAIN_PATH)
+    train_data = load_jsonl(TRAIN_CHAT_PATH)
     print(f"  Loaded {len(train_data)} training examples")
 
     print("Loading test split...")
-    test_data = load_jsonl(TEST_PATH)
+    test_data = load_jsonl(TEST_CHAT_PATH)
     print(f"  Loaded {len(test_data)} test examples")
 
     # Create datasets
@@ -139,6 +139,10 @@ def main():
     # Show dataset info
     print("\nDataset structure:")
     print(dataset_dict)
+
+    print("\nExample (first 500 chars):")
+    example = dataset_dict["train"][0]
+    print(str(example)[:500] + "...")
 
     # Push to hub
     try:
