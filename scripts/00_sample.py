@@ -169,17 +169,24 @@ def fetch_and_validate_single_url(url_data: Dict, timeout: int = 10) -> tuple:
 
 def validate_and_save_urls(urls: List[Dict], output_dir: Path, max_workers: int = 10) -> List[Dict]:
     """Validate URLs, fetch HTML, and save directly to disk (parallelized)."""
-    valid_urls = []
     output_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"\nValidating and fetching {len(urls)} URLs with {max_workers} workers...")
 
+    # Pre-assign IDs to URLs for consistent filename mapping
+    url_data_with_id = []
+    for idx, url_data in enumerate(urls):
+        url_data_copy = url_data.copy()
+        url_data_copy['assigned_id'] = idx
+        url_data_with_id.append(url_data_copy)
+
     # Use ThreadPoolExecutor for parallel fetching
+    results = {}  # Store by assigned_id
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Submit all tasks
         future_to_url = {
             executor.submit(fetch_and_validate_single_url, url_data): url_data
-            for url_data in urls
+            for url_data in url_data_with_id
         }
 
         # Process completed tasks with progress bar
@@ -187,20 +194,25 @@ def validate_and_save_urls(urls: List[Dict], output_dir: Path, max_workers: int 
             success, url_data, html_content = future.result()
 
             if success and html_content:
-                # Save HTML to file
-                html_file = output_dir / f"{len(valid_urls):04d}.html"
+                assigned_id = url_data['assigned_id']
+
+                # Save HTML to file using assigned ID (not completion order)
+                html_file = output_dir / f"{assigned_id:04d}.html"
                 with open(html_file, "w", encoding="utf-8") as f:
                     f.write(html_content)
 
-                # Add metadata
-                valid_urls.append({
-                    "id": len(valid_urls),
+                # Store result
+                results[assigned_id] = {
+                    "id": assigned_id,
                     "url": url_data['url'],
                     "domain": url_data.get('domain', ''),
                     "category": url_data.get('category', ''),
                     "html_file": str(html_file),
                     "timestamp": url_data.get('timestamp', ''),
-                })
+                }
+
+    # Convert to sorted list
+    valid_urls = [results[id] for id in sorted(results.keys())]
 
     print(f"✓ {len(valid_urls)} URLs fetched and saved ({len(urls) - len(valid_urls)} failed)")
     return valid_urls
