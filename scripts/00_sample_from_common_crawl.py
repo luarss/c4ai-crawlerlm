@@ -5,7 +5,6 @@ Common Crawl provides free access to web crawl data. This script samples
 URLs from their index without needing to download WARC files.
 """
 
-import requests
 import json
 import random
 from pathlib import Path
@@ -21,7 +20,7 @@ random.seed(42)
 def get_available_indexes() -> List[str]:
     """Get list of available Common Crawl indexes."""
     url = "https://index.commoncrawl.org/collinfo.json"
-    response = requests.get(url)
+    response = httpx.get(url)
     response.raise_for_status()
 
     indexes = response.json()
@@ -52,44 +51,45 @@ def sample_urls_from_index(
     seen_domains = set()
 
     try:
-        response = requests.get(base_url, params=params, stream=True, timeout=60)
-        response.raise_for_status()
+        # Stream response to process line-by-line without loading entire response into memory
+        with httpx.stream('GET', base_url, params=params, timeout=60) as response:
+            response.raise_for_status()
 
-        for line in tqdm(response.iter_lines(), desc="Processing URLs"):
-            if not line:
-                continue
-
-            try:
-                record = json.loads(line)
-
-                # Filter for HTML content
-                mime = record.get('mime', '')
-                status = record.get('status', '')
-                url = record.get('url', '')
-
-                if 'text/html' not in mime or status != '200':
+            for line in tqdm(response.iter_lines(), desc="Processing URLs"):
+                if not line:
                     continue
 
-                # Extract domain for diversity
-                if domain_diversity:
-                    domain = extract_domain(url)
-                    if domain in seen_domains:
+                try:
+                    record = json.loads(line)
+
+                    # Filter for HTML content
+                    mime = record.get('mime', '')
+                    status = record.get('status', '')
+                    url = record.get('url', '')
+
+                    if 'text/html' not in mime or status != '200':
                         continue
-                    seen_domains.add(domain)
 
-                results.append({
-                    'url': url,
-                    'timestamp': record.get('timestamp'),
-                    'mime': mime,
-                    'status': status,
-                    'digest': record.get('digest'),
-                })
+                    # Extract domain for diversity
+                    if domain_diversity:
+                        domain = extract_domain(url)
+                        if domain in seen_domains:
+                            continue
+                        seen_domains.add(domain)
 
-                if len(results) >= sample_size:
-                    break
+                    results.append({
+                        'url': url,
+                        'timestamp': record.get('timestamp'),
+                        'mime': mime,
+                        'status': status,
+                        'digest': record.get('digest'),
+                    })
 
-            except json.JSONDecodeError:
-                continue
+                    if len(results) >= sample_size:
+                        break
+
+                except json.JSONDecodeError:
+                    continue
 
     except Exception as e:
         print(f"Error querying Common Crawl: {e}")
@@ -106,16 +106,7 @@ def extract_domain(url: str) -> str:
 
 
 def validate_url(url: str, timeout: int = 10) -> bool:
-    """
-    Check if URL is reachable and returns valid HTML.
-
-    Args:
-        url: URL to validate
-        timeout: Request timeout in seconds
-
-    Returns:
-        True if URL is valid and returns HTML, False otherwise
-    """
+    """Check if URL is reachable and returns valid HTML."""
     try:
         with httpx.Client(timeout=timeout, follow_redirects=True) as client:
             response = client.get(url)
@@ -140,21 +131,12 @@ def validate_url(url: str, timeout: int = 10) -> bool:
 
             return True
 
-    except Exception as e:
+    except Exception:
         return False
 
 
 def fetch_and_validate_single_url(url_data: Dict, timeout: int = 10) -> tuple:
-    """
-    Fetch and validate a single URL.
-
-    Args:
-        url_data: URL dictionary with metadata
-        timeout: Request timeout in seconds
-
-    Returns:
-        Tuple of (success: bool, url_data: Dict, html_content: str or None)
-    """
+    """Fetch and validate a single URL."""
     url = url_data['url']
 
     try:
@@ -186,17 +168,7 @@ def fetch_and_validate_single_url(url_data: Dict, timeout: int = 10) -> tuple:
 
 
 def validate_and_save_urls(urls: List[Dict], output_dir: Path, max_workers: int = 10) -> List[Dict]:
-    """
-    Validate URLs, fetch HTML, and save directly to disk (parallelized).
-
-    Args:
-        urls: List of URL dictionaries to validate
-        output_dir: Directory to save HTML files
-        max_workers: Number of parallel workers
-
-    Returns:
-        List of successfully saved URL dictionaries with metadata
-    """
+    """Validate URLs, fetch HTML, and save directly to disk (parallelized)."""
     valid_urls = []
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -257,7 +229,7 @@ def sample_by_category(index_id: str, urls_per_category: int = 10) -> List[Dict]
         }
 
         try:
-            response = requests.get(base_url, params=params, timeout=30)
+            response = httpx.get(base_url, params=params, timeout=30)
             response.raise_for_status()
 
             # Collect all candidates first
@@ -332,25 +304,24 @@ def main():
     # Sample diverse URLs (fetch extra to account for validation failures)
     sampled_urls = sample_by_category(
         index_id=latest_index,
-        urls_per_category=30  # Fetch more since some will fail validation
+        urls_per_category=75
     )
 
     # Validate and save URLs directly to data/raw_html
     valid_urls = validate_and_save_urls(sampled_urls, html_output_dir)
 
     # If we need more valid URLs, sample again
-    target_count = 100
+    target_count = 400
     if len(valid_urls) < target_count:
         print(f"\nNeed {target_count - len(valid_urls)} more valid URLs...")
         additional = sample_by_category(
             index_id=latest_index,
-            urls_per_category=10
+            urls_per_category=50
         )
         more_valid = validate_and_save_urls(additional, html_output_dir)
         valid_urls.extend(more_valid)
 
-    # Trim to target count
-    final_urls = valid_urls[:target_count]
+    final_urls = valid_urls
 
     # Save manifest
     manifest_file = html_output_dir / "dataset_manifest.json"
