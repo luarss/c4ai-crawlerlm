@@ -218,3 +218,4 @@ __marimo__/
 # Project-specific: Large data files
 *.html
 *.json
+!data/fetched/exa_contents.json
