@@ -226,17 +226,6 @@ def main():
 
     # Select best 50 URLs
     selected_urls = select_best_urls(manifest_path, top_n=50)
-
-    # Save selected URLs
-    output_path = Path("data/selected_urls.json")
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    with open(output_path, 'w') as f:
-        json.dump(selected_urls, f, indent=2)
-
-    print(f"\n✓ Saved selected URLs to: {output_path}")
-
-    # Also save just the URL list for easy reference
     url_list_path = Path("data/selected_url_list.txt")
     with open(url_list_path, 'w') as f:
         for item in selected_urls:
