@@ -234,8 +234,8 @@ def main():
     """Main execution."""
     manifest_path = Path("data/raw_html/dataset_manifest.json")
 
-    # Select best 50 URLs
-    selected_urls = select_best_urls(manifest_path, top_n=50)
+    # Select best 100 URLs (to have enough for 50 test + rest for training)
+    selected_urls = select_best_urls(manifest_path, top_n=100)
     url_list_path = Path("data/selected_url_list.txt")
     with open(url_list_path, 'w') as f:
         for item in selected_urls:

@@ -286,24 +286,53 @@ def main():
     # Sample diverse URLs (fetch extra to account for validation failures)
     sampled_urls = sample_by_category(
         index_id=latest_index,
-        urls_per_category=75
+        urls_per_category=150
     )
 
     # Validate and save URLs directly to data/raw_html
     valid_urls = validate_and_save_urls(sampled_urls, html_output_dir)
 
     # If we need more valid URLs, sample again
-    target_count = 400
+    target_count = 800
     if len(valid_urls) < target_count:
         print(f"\nNeed {target_count - len(valid_urls)} more valid URLs...")
+
+        # Track already seen domains to avoid duplicates
+        seen_domains = {url_data['domain'] for url_data in valid_urls}
+
         additional = sample_by_category(
             index_id=latest_index,
             urls_per_category=50
         )
-        more_valid = validate_and_save_urls(additional, html_output_dir)
+
+        # Filter out URLs with domains we've already seen
+        additional_filtered = [
+            url_data for url_data in additional
+            if url_data['domain'] not in seen_domains
+        ]
+
+        print(f"Filtered {len(additional) - len(additional_filtered)} duplicate domains")
+
+        more_valid = validate_and_save_urls(additional_filtered, html_output_dir)
         valid_urls.extend(more_valid)
 
-    final_urls = valid_urls
+    # Final deduplication by URL (keep first occurrence)
+    seen_urls = set()
+    final_urls = []
+    duplicates_removed = 0
+
+    for url_data in valid_urls:
+        url = url_data['url']
+        if url not in seen_urls:
+            seen_urls.add(url)
+            final_urls.append(url_data)
+        else:
+            duplicates_removed += 1
+
+    if duplicates_removed > 0:
+        print(f"Removed {duplicates_removed} duplicate URLs in final deduplication")
+
+    valid_urls = final_urls
 
     # Save manifest
     manifest_file = html_output_dir / "dataset_manifest.json"
