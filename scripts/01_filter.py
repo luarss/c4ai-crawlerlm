@@ -189,7 +189,7 @@ def select_best_urls(manifest_path: Path, top_n: int = 50) -> List[Dict]:
     # Analyze all URLs
     results = []
     for entry in manifest:
-        html_path = manifest_path.parent / Path(entry['html_file']).name
+        html_path = Path(entry['html_file'])
         result = analyze_url(html_path, entry, encoding)
         if result:
             results.append(result)
