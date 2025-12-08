@@ -1,0 +1,261 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "transformers>=4.40.0",
+#     "datasets>=2.18.0",
+#     "trl>=0.8.0",
+#     "torch>=2.0.0",
+#     "peft>=0.10.0",
+#     "accelerate>=0.28.0",
+#     "bitsandbytes>=0.43.0",
+#     "rouge-score>=0.1.2",
+#     "python-Levenshtein>=0.25.0",
+# ]
+# ///
+"""
+Fine-tune Qwen 0.6B on CrawlerLM HTML-to-JSON dataset using SFT.
+
+This script uses HuggingFace TRL for supervised fine-tuning with LoRA adapters.
+Designed to run on HuggingFace Jobs infrastructure with T4 GPU.
+"""
+
+import os
+import json
+from datasets import load_dataset
+from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments
+from trl import SFTTrainer, DataCollatorForCompletionOnlyLM
+import torch
+from rouge_score import rouge_scorer
+import Levenshtein
+from tqdm import tqdm
+
+# Configuration
+MODEL_NAME = "Qwen/Qwen3-0.6B"
+DATASET_NAME = "espsluar/crawlerlm-html-to-json"
+OUTPUT_DIR = "./results/qwen-crawlerlm-sft"
+HF_HUB_MODEL_ID = "espsluar/qwen-crawlerlm-sft"
+
+# Training hyperparameters
+MAX_SEQ_LENGTH = 8192  # Qwen2.5 supports up to 128K, but start conservatively
+BATCH_SIZE = 2  # Small batch for T4 (16GB VRAM)
+GRADIENT_ACCUMULATION_STEPS = 8  # Effective batch size = 16
+LEARNING_RATE = 2e-5
+NUM_EPOCHS = 3
+WARMUP_RATIO = 0.1
+LOGGING_STEPS = 10
+SAVE_STEPS = 100
+EVAL_STEPS = 100
+
+def format_chat_template(example, tokenizer):
+    """
+    Format the dataset examples using the chat template.
+    Dataset already has 'messages' field with user/assistant roles.
+    """
+    # Apply the model's chat template
+    formatted = tokenizer.apply_chat_template(
+        example["messages"],
+        tokenize=False,
+        add_generation_prompt=False
+    )
+    return {"text": formatted}
+
+def evaluate_model(model, tokenizer, test_dataset, device="cuda"):
+    """
+    Evaluate the model on test set using ROUGE and Levenshtein metrics.
+
+    Returns:
+        dict: Evaluation metrics including ROUGE-1, ROUGE-2, ROUGE-L, and Levenshtein distance
+    """
+    print("\n" + "="*60)
+    print("Evaluating on test set...")
+    print("="*60)
+
+    model.eval()
+    scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
+
+    rouge1_scores = []
+    rouge2_scores = []
+    rougeL_scores = []
+    levenshtein_distances = []
+
+    # Process each test example
+    for example in tqdm(test_dataset, desc="Evaluating"):
+        # Get the user message (HTML input)
+        messages = example["messages"]
+        user_message = [msg for msg in messages if msg["role"] == "user"][0]["content"]
+        expected_output = [msg for msg in messages if msg["role"] == "assistant"][0]["content"]
+
+        # Create input with generation prompt
+        input_messages = [{"role": "user", "content": user_message}]
+        input_text = tokenizer.apply_chat_template(
+            input_messages,
+            tokenize=False,
+            add_generation_prompt=True
+        )
+
+        # Generate prediction
+        inputs = tokenizer(input_text, return_tensors="pt", truncation=True, max_length=MAX_SEQ_LENGTH).to(device)
+
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=2048,
+                do_sample=False,
+                temperature=None,
+                top_p=None,
+            )
+
+        # Decode only the generated tokens (skip the input)
+        generated_ids = outputs[0][inputs.input_ids.shape[1]:]
+        predicted_output = tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
+
+        # Calculate ROUGE scores
+        rouge_scores = scorer.score(expected_output, predicted_output)
+        rouge1_scores.append(rouge_scores['rouge1'].fmeasure)
+        rouge2_scores.append(rouge_scores['rouge2'].fmeasure)
+        rougeL_scores.append(rouge_scores['rougeL'].fmeasure)
+
+        # Calculate Levenshtein distance
+        lev_distance = Levenshtein.distance(expected_output, predicted_output)
+        levenshtein_distances.append(lev_distance)
+
+    # Calculate average metrics
+    results = {
+        "rouge1": sum(rouge1_scores) / len(rouge1_scores),
+        "rouge2": sum(rouge2_scores) / len(rouge2_scores),
+        "rougeL": sum(rougeL_scores) / len(rougeL_scores),
+        "levenshtein_avg": sum(levenshtein_distances) / len(levenshtein_distances),
+        "num_examples": len(test_dataset),
+    }
+
+    return results
+
+def main():
+    print("="*60)
+    print("CrawlerLM Fine-tuning Script")
+    print("="*60)
+    print(f"Model: {MODEL_NAME}")
+    print(f"Dataset: {DATASET_NAME}")
+    print(f"Output: {OUTPUT_DIR}")
+    print(f"Max sequence length: {MAX_SEQ_LENGTH}")
+    print(f"Batch size: {BATCH_SIZE}")
+    print(f"Gradient accumulation: {GRADIENT_ACCUMULATION_STEPS}")
+    print(f"Effective batch size: {BATCH_SIZE * GRADIENT_ACCUMULATION_STEPS}")
+    print(f"Learning rate: {LEARNING_RATE}")
+    print(f"Epochs: {NUM_EPOCHS}")
+    print("="*60)
+
+    # Load tokenizer
+    print("\n[1/6] Loading tokenizer...")
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
+
+    # Ensure pad token is set
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+    # Load dataset
+    print("\n[2/6] Loading dataset...")
+    dataset = load_dataset(DATASET_NAME)
+    print(f"  Train examples: {len(dataset['train'])}")
+    print(f"  Validation examples: {len(dataset['validation'])}")
+    print(f"  Test examples: {len(dataset['test'])}")
+
+    # Format dataset with chat template
+    print("\n[3/6] Formatting dataset with chat template...")
+    train_dataset = dataset["train"].map(
+        lambda x: format_chat_template(x, tokenizer),
+        remove_columns=dataset["train"].column_names
+    )
+    eval_dataset = dataset["validation"].map(
+        lambda x: format_chat_template(x, tokenizer),
+        remove_columns=dataset["validation"].column_names
+    )
+
+    print(f"  Example formatted text (first 500 chars):")
+    print(f"  {train_dataset[0]['text'][:500]}...")
+
+    # Load model
+    print("\n[4/6] Loading model...")
+    model = AutoModelForCausalLM.from_pretrained(
+        MODEL_NAME,
+        torch_dtype=torch.bfloat16,
+        device_map="auto",
+        trust_remote_code=True,
+    )
+
+    # Enable gradient checkpointing for memory efficiency
+    model.gradient_checkpointing_enable()
+
+    # Prepare response template for completion-only training
+    # We only compute loss on the assistant's response
+    response_template = "<|im_start|>assistant"
+    collator = DataCollatorForCompletionOnlyLM(
+        response_template=response_template,
+        tokenizer=tokenizer
+    )
+
+    # Training arguments
+    print("\n[5/6] Setting up training arguments...")
+    training_args = TrainingArguments(
+        output_dir=OUTPUT_DIR,
+        num_train_epochs=NUM_EPOCHS,
+        per_device_train_batch_size=BATCH_SIZE,
+        per_device_eval_batch_size=BATCH_SIZE,
+        gradient_accumulation_steps=GRADIENT_ACCUMULATION_STEPS,
+        learning_rate=LEARNING_RATE,
+        warmup_ratio=WARMUP_RATIO,
+        logging_steps=LOGGING_STEPS,
+        save_steps=SAVE_STEPS,
+        eval_steps=EVAL_STEPS,
+        eval_strategy="steps",
+        save_strategy="steps",
+        load_best_model_at_end=True,
+        metric_for_best_model="eval_loss",
+        greater_is_better=False,
+        bf16=True,  # Use bfloat16 for training
+        gradient_checkpointing=True,
+        report_to=["tensorboard"],
+        hub_model_id=HF_HUB_MODEL_ID,
+        push_to_hub=True,
+        hub_strategy="every_save",
+    )
+
+    # Initialize trainer
+    print("\n[6/6] Initializing SFT Trainer...")
+    trainer = SFTTrainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        tokenizer=tokenizer,
+        data_collator=collator,
+        max_seq_length=MAX_SEQ_LENGTH,
+        dataset_text_field="text",
+    )
+
+    # Start training
+    print("\n" + "="*60)
+    print("Starting training...")
+    print("="*60 + "\n")
+
+    trainer.train()
+
+    # Save final model
+    print("\n" + "="*60)
+    print("Training complete! Saving final model...")
+    print("="*60)
+
+    trainer.save_model(OUTPUT_DIR)
+    tokenizer.save_pretrained(OUTPUT_DIR)
+
+    # Push to hub
+    print("\nPushing to HuggingFace Hub...")
+    trainer.push_to_hub()
+
+    print("\n✓ Fine-tuning complete!")
+    print(f"  Model saved to: {OUTPUT_DIR}")
+    print(f"  Hub model: {HF_HUB_MODEL_ID}")
+
+if __name__ == "__main__":
+    main()
