@@ -1,0 +1,27 @@
+[project]
+name = "c4ai-crawlerlm"
+version = "0.1.0"
+description = "HTML to JSON dataset generation and model fine-tuning for web crawling"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "httpx>=0.27.0",
+    "pydantic>=2.12.5",
+    "python-dotenv>=1.0.0",
+    "exa-py>=2.0.1",
+    "beautifulsoup4>=4.12.0",
+    "tqdm>=4.66.0",
+    "transformers>=4.57.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "notebook>=7.5.0",
+    "pandas>=2.3.3",
+    "matplotlib>=3.10.7",
+    "seaborn>=0.13.2",
+    "tiktoken>=0.12.0",
+    "langdetect>=1.0.9",
+    "huggingface-hub>=0.36.0",
+    "datasets>=4.4.1",
+]
