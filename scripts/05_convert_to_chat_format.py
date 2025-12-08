@@ -9,6 +9,7 @@ expected by Qwen3 models for fine-tuning.
 import json
 from pathlib import Path
 from tqdm import tqdm
+import tiktoken
 
 # Paths
 TRAIN_INPUT = Path("data/processed/train.jsonl")
@@ -17,6 +18,17 @@ TEST_INPUT = Path("data/processed/test.jsonl")
 TRAIN_OUTPUT = Path("data/processed/train_chat.jsonl")
 VAL_OUTPUT = Path("data/processed/val_chat.jsonl")
 TEST_OUTPUT = Path("data/processed/test_chat.jsonl")
+
+# Token limit for filtering
+MAX_TOKENS = 24_000
+
+# Initialize tokenizer (using cl100k_base which is used by GPT-4 and similar models)
+tokenizer = tiktoken.get_encoding("cl100k_base")
+
+
+def count_tokens(text: str) -> int:
+    """Count the number of tokens in a text string."""
+    return len(tokenizer.encode(text))
 
 
 def convert_to_chat_format(example: dict) -> dict:
@@ -60,7 +72,7 @@ Return a JSON object with these fields: url, title, text, author, published_date
 
 
 def convert_file(input_path: Path, output_path: Path):
-    """Convert a JSONL file to chat format."""
+    """Convert a JSONL file to chat format, filtering by token count."""
     print(f"Converting {input_path} → {output_path}")
 
     examples = []
@@ -70,11 +82,23 @@ def convert_file(input_path: Path, output_path: Path):
 
     print(f"  Loaded {len(examples)} examples")
 
-    # Convert to chat format
+    # Convert to chat format and filter by token count
     chat_examples = []
+    filtered_count = 0
+
     for example in tqdm(examples, desc="  Converting"):
         chat_example = convert_to_chat_format(example)
-        chat_examples.append(chat_example)
+
+        # Count tokens in the full conversation
+        total_tokens = sum(
+            count_tokens(msg["content"])
+            for msg in chat_example["messages"]
+        )
+
+        if total_tokens <= MAX_TOKENS:
+            chat_examples.append(chat_example)
+        else:
+            filtered_count += 1
 
     # Write output
     with open(output_path, 'w') as f:
@@ -82,6 +106,8 @@ def convert_file(input_path: Path, output_path: Path):
             f.write(json.dumps(chat_example, ensure_ascii=False) + '\n')
 
     print(f"  ✓ Wrote {len(chat_examples)} examples to {output_path}")
+    if filtered_count > 0:
+        print(f"  ⚠ Filtered out {filtered_count} examples exceeding {MAX_TOKENS:,} tokens")
 
 
 def main():
