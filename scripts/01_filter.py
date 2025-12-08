@@ -13,7 +13,7 @@ from pathlib import Path
 from bs4 import BeautifulSoup
 import re
 from typing import Dict, List
-import tiktoken
+from qwen_utils import count_tokens
 
 
 def detect_spa_or_dynamic(html: str, soup: BeautifulSoup) -> bool:
@@ -139,7 +139,7 @@ def score_content_quality(html: str, soup: BeautifulSoup) -> float:
     return min(score, 100.0)
 
 
-def analyze_url(html_path: Path, manifest_entry: Dict, encoding) -> Dict:
+def analyze_url(html_path: Path, manifest_entry: Dict) -> Dict:
     """Analyze a single URL and return scoring metrics."""
     try:
         with open(html_path, 'r', encoding='utf-8', errors='replace') as f:
@@ -153,9 +153,8 @@ def analyze_url(html_path: Path, manifest_entry: Dict, encoding) -> Dict:
     is_dynamic = detect_spa_or_dynamic(html, soup)
     has_issues = has_anomalies(html, soup)
 
-    # Token count
-    tokens = encoding.encode(html)
-    token_count = len(tokens)
+    # Token count using Qwen tokenizer
+    token_count = count_tokens(html)
 
     # Score
     quality_score = score_content_quality(html, soup)
@@ -183,14 +182,11 @@ def select_best_urls(manifest_path: Path, top_n: int = 50) -> List[Dict]:
 
     print(f"Analyzing {len(manifest)} URLs...")
 
-    # Initialize tokenizer
-    encoding = tiktoken.get_encoding('cl100k_base')
-
     # Analyze all URLs
     results = []
     for entry in manifest:
         html_path = Path(entry['html_file'])
-        result = analyze_url(html_path, entry, encoding)
+        result = analyze_url(html_path, entry)
         if result:
             results.append(result)
 

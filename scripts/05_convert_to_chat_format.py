@@ -9,7 +9,7 @@ expected by Qwen3 models for fine-tuning.
 import json
 from pathlib import Path
 from tqdm import tqdm
-import tiktoken
+from qwen_utils import count_chat_tokens
 
 # Paths
 TRAIN_INPUT = Path("data/processed/train.jsonl")
@@ -21,14 +21,6 @@ TEST_OUTPUT = Path("data/processed/test_chat.jsonl")
 
 # Token limit for filtering
 MAX_TOKENS = 24_000
-
-# Initialize tokenizer (using cl100k_base which is used by GPT-4 and similar models)
-tokenizer = tiktoken.get_encoding("cl100k_base")
-
-
-def count_tokens(text: str) -> int:
-    """Count the number of tokens in a text string."""
-    return len(tokenizer.encode(text))
 
 
 def convert_to_chat_format(example: dict) -> dict:
@@ -89,11 +81,8 @@ def convert_file(input_path: Path, output_path: Path):
     for example in tqdm(examples, desc="  Converting"):
         chat_example = convert_to_chat_format(example)
 
-        # Count tokens in the full conversation
-        total_tokens = sum(
-            count_tokens(msg["content"])
-            for msg in chat_example["messages"]
-        )
+        # Count tokens in the full conversation using Qwen tokenizer
+        total_tokens = count_chat_tokens(chat_example["messages"])
 
         if total_tokens <= MAX_TOKENS:
             chat_examples.append(chat_example)
