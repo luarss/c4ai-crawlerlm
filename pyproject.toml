@@ -26,4 +26,5 @@ dev = [
     "datasets>=4.4.1",
     "python-Levenshtein>=0.25.0",
     "rouge-score>=0.1.2",
+    "llama-cpp-python>=0.3.16",
 ]
