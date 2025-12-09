@@ -24,7 +24,4 @@ dev = [
     "langdetect>=1.0.9",
     "huggingface-hub>=0.36.0",
     "datasets>=4.4.1",
-    "python-Levenshtein>=0.25.0",
-    "rouge-score>=0.1.2",
-    "llama-cpp-python>=0.3.16",
 ]
