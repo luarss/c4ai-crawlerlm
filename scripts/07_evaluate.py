@@ -23,7 +23,7 @@ Usage:
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import Levenshtein
 import torch
@@ -33,14 +33,14 @@ from rouge_score import rouge_scorer
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-def load_test_data(dataset_name: str = "espsluar/crawlerlm-html-to-json", max_examples: int = None) -> list[dict[str, Any]]:
+def load_test_data(dataset_name: str = "espsluar/crawlerlm-html-to-json", max_examples: Optional[int] = None) -> list[dict[str, Any]]:
     """Load test dataset from HuggingFace Hub."""
     print(f"Loading test data from {dataset_name}...")
     ds = load_dataset(dataset_name, split="test")
 
     examples = []
     for idx, item in enumerate(ds):
-        if max_examples and idx >= max_examples:
+        if max_examples is not None and idx >= max_examples:
             break
         examples.append(item)
 
