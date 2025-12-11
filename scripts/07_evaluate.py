@@ -64,7 +64,7 @@ def load_base_model(model_id: str = "Qwen/Qwen3-0.6B"):
 
 
 def load_finetuned_model(base_model_id: str = "Qwen/Qwen3-0.6B",
-                         adapter_id: str = "espsluar/crawlerlm-qwen3-0.6b-test"):
+                         adapter_id: str = "espsluar/qwen-crawlerlm-sft"):
     """Load fine-tuned model with LoRA adapter."""
     print(f"Loading fine-tuned model: {base_model_id} + {adapter_id}")
 
@@ -275,7 +275,7 @@ def main():
         },
         "finetuned_model": {
             "name": finetuned_results["model_name"],
-            "id": "espsluar/crawlerlm-qwen3-0.6b-test",
+            "id": "espsluar/qwen-crawlerlm-sft",
             "metrics": finetuned_results["metrics"],
         },
         "improvements": {},
@@ -299,7 +299,39 @@ def main():
     with open(output_dir / "comparison_summary.json", "w") as f:
         json.dump(comparison, f, indent=2)
 
+    # Save detailed samples for inspection
+    samples = []
+    for idx in range(len(test_examples)):
+        sample = {
+            "example_idx": idx,
+            "reference": finetuned_results["references"][idx],
+            "base_prediction": base_results["predictions"][idx],
+            "finetuned_prediction": finetuned_results["predictions"][idx],
+        }
+        samples.append(sample)
+
+    with open(output_dir / "samples.json", "w") as f:
+        json.dump(samples, f, indent=2)
+
+    # Print samples to stdout for easy viewing
+    print("\n" + "=" * 80)
+    print("SAMPLE OUTPUTS (5 examples)")
+    print("=" * 80)
+    for idx, sample in enumerate(samples):
+        # Get HTML from test example
+        user_msg = test_examples[idx]["messages"][0]["content"]
+        html_start = user_msg.find("HTML:\n") + 6
+        html = user_msg[html_start:]
+
+        print(f"\n--- Example {sample['example_idx'] + 1} ---")
+        print(f"\n[HTML]:\n{html}")
+        print(f"\n[REFERENCE]:\n{sample['reference']}")
+        print(f"\n[BASE MODEL]:\n{sample['base_prediction']}")
+        print(f"\n[FINE-TUNED]:\n{sample['finetuned_prediction']}")
+        print("-" * 80)
+
     print(f"\n✓ Results saved to {output_dir}/comparison_summary.json")
+    print(f"✓ Samples saved to {output_dir}/samples.json")
     print("\nEvaluation complete!")
 
 
