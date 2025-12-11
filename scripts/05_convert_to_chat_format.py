@@ -11,7 +11,6 @@ from pathlib import Path
 from tqdm import tqdm
 from qwen_utils import count_chat_tokens
 
-# Paths
 TRAIN_INPUT = Path("data/processed/train.jsonl")
 VAL_INPUT = Path("data/processed/val.jsonl")
 TEST_INPUT = Path("data/processed/test.jsonl")
@@ -19,7 +18,6 @@ TRAIN_OUTPUT = Path("data/processed/train_chat.jsonl")
 VAL_OUTPUT = Path("data/processed/val_chat.jsonl")
 TEST_OUTPUT = Path("data/processed/test_chat.jsonl")
 
-# Token limit for filtering
 MAX_TOKENS = 24_000
 
 
@@ -41,7 +39,6 @@ def convert_to_chat_format(example: dict) -> dict:
             ]
         }
     """
-    # Create user prompt
     user_content = f"""Extract structured data from the following HTML and return it as JSON.
 
 HTML:
@@ -49,10 +46,8 @@ HTML:
 
 Return a JSON object with these fields: url, title, text, author, published_date, image, favicon, id"""
 
-    # Create assistant response (JSON string)
     assistant_content = json.dumps(example['expected_json'], ensure_ascii=False, indent=2)
 
-    # Create chat format
     chat_example = {
         "messages": [
             {"role": "user", "content": user_content},
@@ -74,7 +69,6 @@ def convert_file(input_path: Path, output_path: Path):
 
     print(f"  Loaded {len(examples)} examples")
 
-    # Convert to chat format and filter by token count
     chat_examples = []
     filtered_count = 0
 
@@ -89,7 +83,6 @@ def convert_file(input_path: Path, output_path: Path):
         else:
             filtered_count += 1
 
-    # Write output
     with open(output_path, 'w') as f:
         for chat_example in chat_examples:
             f.write(json.dumps(chat_example, ensure_ascii=False) + '\n')
@@ -105,13 +98,8 @@ def main():
     print("Convert Dataset to Qwen3 Chat Format")
     print("=" * 60)
 
-    # Convert train split
     convert_file(TRAIN_INPUT, TRAIN_OUTPUT)
-
-    # Convert validation split
     convert_file(VAL_INPUT, VAL_OUTPUT)
-
-    # Convert test split
     convert_file(TEST_INPUT, TEST_OUTPUT)
 
     print("\n✓ Conversion complete!")
@@ -120,7 +108,6 @@ def main():
     print(f"  - {VAL_OUTPUT}")
     print(f"  - {TEST_OUTPUT}")
 
-    # Show example
     print("\nExample chat format:")
     with open(TRAIN_OUTPUT) as f:
         example = json.loads(f.readline())

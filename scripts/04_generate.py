@@ -20,7 +20,8 @@ import random
 import re
 from pathlib import Path
 from typing import Dict, List
-from bs4 import BeautifulSoup
+
+from bs4 import BeautifulSoup, Comment
 
 
 random.seed(42)
@@ -52,7 +53,6 @@ def add_wrapper_divs(html: str, num_wrappers: int = None) -> str:
     body = soup.find('body')
 
     if body:
-        # Wrap body contents
         for _ in range(num_wrappers):
             wrapper_classes = [
                 'container', 'wrapper', 'content', 'main',
@@ -60,7 +60,6 @@ def add_wrapper_divs(html: str, num_wrappers: int = None) -> str:
             ]
             wrapper = soup.new_tag('div', attrs={'class': random.choice(wrapper_classes)})
 
-            # Move all body children into wrapper
             for child in list(body.children):
                 wrapper.append(child)
 
@@ -73,25 +72,20 @@ def add_random_attributes(html: str) -> str:
     """Add random attributes to existing elements."""
     soup = BeautifulSoup(html, 'html.parser')
 
-    # Find all tags
     all_tags = soup.find_all(True)
 
-    # Add attributes to random subset of tags
     num_to_modify = min(len(all_tags), random.randint(5, 20))
     tags_to_modify = random.sample(all_tags, num_to_modify)
 
     for tag in tags_to_modify:
-        # Random class
         if random.random() < 0.5:
             existing_classes = tag.get('class', [])
             new_classes = existing_classes + [f'auto-{random.randint(1000, 9999)}']
             tag['class'] = new_classes
 
-        # Random data attribute
         if random.random() < 0.3:
             tag[f'data-id'] = f'{random.randint(10000, 99999)}'
 
-        # Random aria attribute
         if random.random() < 0.2:
             tag['aria-hidden'] = 'true'
 
@@ -112,12 +106,9 @@ def inject_comments(html: str) -> str:
             ' Ad placement ',
         ]
 
-        # Add 2-5 comments
         for _ in range(random.randint(2, 5)):
-            from bs4 import Comment
             comment = Comment(random.choice(comments))
 
-            # Insert at random position in body
             all_elements = body.find_all(True)
             if all_elements:
                 random_element = random.choice(all_elements)
@@ -148,11 +139,9 @@ def inject_styles(html: str) -> str:
 
 def vary_whitespace(html: str) -> str:
     """Vary whitespace and formatting."""
-    # Randomly add extra newlines
     if random.random() < 0.5:
         html = re.sub(r'(<div)', r'\n\1', html)
 
-    # Randomly add spaces
     if random.random() < 0.5:
         html = re.sub(r'(>)(<)', r'>\n<', html)
 
@@ -163,7 +152,6 @@ def generate_variation(base_example: Dict, variation_id: int) -> Dict:
     """Generate a synthetic variation of a base example."""
     html = base_example['example_html']
 
-    # Apply random augmentations
     augmentations = []
 
     if random.random() < 0.7:
@@ -186,16 +174,14 @@ def generate_variation(base_example: Dict, variation_id: int) -> Dict:
         html = vary_whitespace(html)
         augmentations.append('whitespace')
 
-    # Create variation (preserve expected_json exactly)
     variation = {
         'example_html': html,
         'expected_json': base_example['expected_json'],
-        # Metadata for tracking
         '_metadata': {
             'variation_id': variation_id,
             'base_url': base_example['expected_json']['url'],
             'augmentations': augmentations,
-        }
+        },
     }
 
     return variation
@@ -205,7 +191,6 @@ def generate_synthetic_dataset(base_examples: List[Dict], target_size: int) -> L
     """Generate synthetic variations to reach target size."""
     synthetic_examples = []
 
-    # Calculate how many variations per base example
     num_base = len(base_examples)
     variations_per_base = (target_size - num_base) // num_base
     extra_variations = (target_size - num_base) % num_base
@@ -215,12 +200,9 @@ def generate_synthetic_dataset(base_examples: List[Dict], target_size: int) -> L
 
     variation_id = 0
 
-    # Generate variations for each base example
     for idx, base_example in enumerate(base_examples):
-        # Include original
         synthetic_examples.append(base_example)
 
-        # Generate variations
         num_variations = variations_per_base
         if idx < extra_variations:
             num_variations += 1
@@ -237,7 +219,6 @@ def save_dataset(examples: List[Dict], path: Path, strip_metadata: bool = True):
     """Save dataset to JSONL."""
     with open(path, 'w') as f:
         for example in examples:
-            # Optionally strip metadata before saving
             if strip_metadata and '_metadata' in example:
                 example_copy = {k: v for k, v in example.items() if k != '_metadata'}
                 f.write(json.dumps(example_copy) + '\n')
@@ -263,30 +244,25 @@ def main():
     val_path = Path("data/processed/val.jsonl")
     test_path = Path("data/processed/test.jsonl")
 
-    # Load golden dataset
     print("Loading golden dataset...")
     golden_examples = load_golden_dataset(golden_path)
     print(f"Total golden examples: {len(golden_examples)}")
 
-    # Step 1: Hold out test set (50 examples)
-    print("\nStep 1: Holding out test set...")
+    print("\nHolding out test set...")
     remaining, test_examples = split_test_set(golden_examples, test_size=50)
     print(f"Test holdout: {len(test_examples)} examples")
     print(f"Remaining for training: {len(remaining)} examples")
 
-    # Step 2: Generate synthetic data from remaining examples
-    target_synthetic_size = 450  # Generate 450 total
-    print(f"\nStep 2: Generating {target_synthetic_size} synthetic examples from {len(remaining)} base examples...")
+    target_synthetic_size = 450
+    print(f"\nGenerating {target_synthetic_size} synthetic examples from {len(remaining)} base examples...")
     synthetic_examples = generate_synthetic_dataset(remaining, target_synthetic_size)
     print(f"Total synthetic examples: {len(synthetic_examples)}")
 
-    # Step 3: Split synthetic into train (400) and val (50)
-    print(f"\nStep 3: Splitting synthetic into train/val...")
+    print(f"\nSplitting synthetic into train/val...")
     train_examples, val_examples = split_train_val(synthetic_examples, train_size=400, val_size=50)
     print(f"Train: {len(train_examples)} examples")
     print(f"Validation: {len(val_examples)} examples")
 
-    # Save datasets
     print("\nSaving datasets...")
     save_dataset(train_examples, train_path, strip_metadata=True)
     save_dataset(val_examples, val_path, strip_metadata=True)
@@ -296,7 +272,6 @@ def main():
     print(f"✓ Validation set: {val_path} ({len(val_examples)} examples)")
     print(f"✓ Test set: {test_path} ({len(test_examples)} examples)")
 
-    # Summary
     print("\n" + "="*60)
     print("DATASET GENERATION COMPLETE")
     print("="*60)

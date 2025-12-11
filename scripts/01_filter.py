@@ -9,10 +9,12 @@ Criteria:
 """
 
 import json
-from pathlib import Path
-from bs4 import BeautifulSoup
 import re
+from collections import Counter
+from pathlib import Path
 from typing import Dict, List
+
+from bs4 import BeautifulSoup
 from qwen_utils import count_tokens
 
 
@@ -104,22 +106,22 @@ def score_content_quality(html: str, soup: BeautifulSoup) -> float:
     if word_count > 0:
         unique_words = len(set(w.lower() for w in words if len(w) > 3))
         vocab_richness = unique_words / word_count
-        score += min(vocab_richness * 100, 20)  # Max 20 points
+        score += min(vocab_richness * 100, 20)
 
     # Semantic HTML elements
     semantic_tags = ['article', 'section', 'nav', 'header', 'footer', 'main', 'aside']
     semantic_count = sum(len(soup.find_all(tag)) for tag in semantic_tags)
-    score += min(semantic_count * 2, 15)  # Max 15 points
+    score += min(semantic_count * 2, 15)
 
     # Headers
     header_count = len(soup.find_all(re.compile(r'^h[1-6]$')))
-    score += min(header_count * 1.5, 10)  # Max 10 points
+    score += min(header_count * 1.5, 10)
 
     # Paragraphs
     p_count = len(soup.find_all('p'))
-    score += min(p_count * 0.5, 10)  # Max 10 points
+    score += min(p_count * 0.5, 10)
 
-    # Links (not too many, not too few)
+    # Links
     links = soup.find_all('a', href=True)
     link_count = len(links)
     if 5 <= link_count <= 50:
@@ -149,14 +151,9 @@ def analyze_url(html_path: Path, manifest_entry: Dict) -> Dict:
 
     soup = BeautifulSoup(html, 'html.parser')
 
-    # Filter criteria
     is_dynamic = detect_spa_or_dynamic(html, soup)
     has_issues = has_anomalies(html, soup)
-
-    # Token count using Qwen tokenizer
     token_count = count_tokens(html)
-
-    # Score
     quality_score = score_content_quality(html, soup)
 
     return {
@@ -176,13 +173,11 @@ def analyze_url(html_path: Path, manifest_entry: Dict) -> Dict:
 
 def select_best_urls(manifest_path: Path, top_n: int = 50) -> List[Dict]:
     """Select the best N URLs based on quality criteria."""
-    # Load manifest
     with open(manifest_path) as f:
         manifest = json.load(f)
 
     print(f"Analyzing {len(manifest)} URLs...")
 
-    # Analyze all URLs
     results = []
     for entry in manifest:
         html_path = Path(entry['html_file'])
@@ -192,7 +187,6 @@ def select_best_urls(manifest_path: Path, top_n: int = 50) -> List[Dict]:
 
     print(f"Total analyzed: {len(results)}")
 
-    # Filter eligible URLs
     eligible = [r for r in results if r['eligible']]
     print(f"Eligible URLs (static, no issues, 4K-128K tokens): {len(eligible)}")
 
@@ -206,18 +200,14 @@ def select_best_urls(manifest_path: Path, top_n: int = 50) -> List[Dict]:
     eligible_deduped = list(url_to_best.values())
     print(f"After deduplication: {len(eligible_deduped)} unique URLs")
 
-    # Sort by quality score
     eligible_sorted = sorted(eligible_deduped, key=lambda x: x['quality_score'], reverse=True)
 
-    # Select top N
     selected = eligible_sorted[:top_n]
 
     print(f"\nSelected top {len(selected)} URLs")
     print(f"Quality score range: {selected[-1]['quality_score']:.1f} - {selected[0]['quality_score']:.1f}")
     print(f"Token count range: {min(s['token_count'] for s in selected):,} - {max(s['token_count'] for s in selected):,}")
 
-    # Category distribution
-    from collections import Counter
     category_dist = Counter(s['category'] for s in selected)
     print(f"\nCategory distribution:")
     for cat, count in category_dist.items():
@@ -230,7 +220,6 @@ def main():
     """Main execution."""
     manifest_path = Path("data/raw_html/dataset_manifest.json")
 
-    # Select best 100 URLs (to have enough for 50 test + rest for training)
     selected_urls = select_best_urls(manifest_path, top_n=100)
     url_list_path = Path("data/selected_url_list.txt")
     with open(url_list_path, 'w') as f:
