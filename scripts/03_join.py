@@ -14,7 +14,7 @@ Output format:
 
 import json
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict
 from urllib.parse import urlparse
 
 
@@ -23,7 +23,6 @@ def load_manifest(manifest_path: str) -> Dict[str, dict]:
     with open(manifest_path, 'r') as f:
         manifest = json.load(f)
 
-    # Create mapping from URL to manifest entry
     url_to_entry = {entry['url']: entry for entry in manifest}
     print(f"Loaded {len(url_to_entry)} entries from manifest")
     return url_to_entry
@@ -32,10 +31,8 @@ def load_manifest(manifest_path: str) -> Dict[str, dict]:
 def normalize_url(url: str) -> str:
     """Normalize URL for matching (remove trailing slash, lowercase domain)."""
     parsed = urlparse(url)
-    # Normalize: lowercase domain, remove trailing slash from path
     domain = parsed.netloc.lower()
     path = parsed.path.rstrip('/')
-    # Rebuild without scheme to allow http/https matching
     normalized = f"{domain}{path}"
     if parsed.query:
         normalized += f"?{parsed.query}"
@@ -47,20 +44,16 @@ def load_exa_contents(exa_path: str) -> Dict[str, dict]:
     with open(exa_path, 'r') as f:
         exa_contents = json.load(f)
 
-    # Create mapping from normalized URL to extracted JSON
-    # Keep both original and normalized for matching
     url_to_json = {}
     for entry in exa_contents:
         url_to_json[entry['url']] = entry
-        # Also add normalized version
-        normalized = normalize_url(entry['url'])
-        url_to_json[normalized] = entry
+        url_to_json[normalize_url(entry['url'])] = entry
 
     print(f"Loaded {len(exa_contents)} JSON extracts from Exa")
     return url_to_json
 
 
-def read_html_file(html_path: str) -> str:
+def read_html_file(html_path: Path) -> str:
     """Read HTML file content."""
     with open(html_path, 'r', encoding='utf-8', errors='ignore') as f:
         return f.read()
@@ -68,17 +61,14 @@ def read_html_file(html_path: str) -> str:
 
 def join_datasets(manifest_path: str, exa_path: str, output_path: str):
     """Join HTML files with JSON extracts using the original manifest."""
-    # Load original manifest
     url_to_manifest = load_manifest(manifest_path)
 
-    # Load Exa JSON extracts
     with open(exa_path, 'r') as f:
         exa_contents = json.load(f)
 
     print(f"Loaded {len(url_to_manifest)} entries from manifest")
     print(f"Loaded {len(exa_contents)} JSON extracts from Exa")
 
-    # Create joined dataset - iterate through exa_contents
     joined_data = []
     found_count = 0
     not_found_urls = []
@@ -86,16 +76,11 @@ def join_datasets(manifest_path: str, exa_path: str, output_path: str):
     for exa_entry in exa_contents:
         exa_url = exa_entry['url']
 
-        # Try exact match first
         manifest_entry = url_to_manifest.get(exa_url)
 
-        # If not found, try URL normalization
         if not manifest_entry:
-            # Try with/without www
             for url_variant in [exa_url, exa_url.replace('://', '://www.'), exa_url.replace('://www.', '://')]:
-                # Try with/without trailing slash
                 for url_slash in [url_variant, url_variant.rstrip('/'), url_variant + '/']:
-                    # Try http/https
                     for url_scheme in [url_slash, url_slash.replace('https://', 'http://'), url_slash.replace('http://', 'https://')]:
                         if url_scheme in url_to_manifest:
                             manifest_entry = url_to_manifest[url_scheme]
@@ -109,7 +94,6 @@ def join_datasets(manifest_path: str, exa_path: str, output_path: str):
             html_file = manifest_entry['html_file']
             html_path = Path(html_file)
 
-            # Try to read HTML file
             try:
                 html_content = read_html_file(html_path)
 
@@ -149,7 +133,6 @@ def join_datasets(manifest_path: str, exa_path: str, output_path: str):
     print(f"\nJoined dataset saved to: {output_file}")
     print(f"Total entries: {len(joined_data)}")
 
-    # Print sample
     if joined_data:
         print("\nSample entry structure:")
         sample = joined_data[0]
@@ -160,7 +143,6 @@ def join_datasets(manifest_path: str, exa_path: str, output_path: str):
 
 def main():
     """Main execution function."""
-    # Paths
     manifest_path = "data/raw_html/dataset_manifest.json"
     exa_path = "data/fetched/exa_contents.json"
     output_path = "data/processed/golden.jsonl"

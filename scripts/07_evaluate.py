@@ -96,7 +96,6 @@ def run_inference(model, tokenizer, html: str, max_new_tokens: int = 1024) -> st
             do_sample=True,
         )
 
-    # Decode only the generated part (exclude input prompt)
     generated_text = tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
     return generated_text.strip()
 
@@ -112,17 +111,14 @@ def compute_metrics(predictions: list[str], references: list[str]) -> dict[str, 
     normalized_levenshtein = []
 
     for pred, ref in zip(predictions, references):
-        # ROUGE scores
         scores = scorer.score(ref, pred)
         rouge1_scores.append(scores['rouge1'].fmeasure)
         rouge2_scores.append(scores['rouge2'].fmeasure)
         rougeL_scores.append(scores['rougeL'].fmeasure)
 
-        # Levenshtein distance
         lev_dist = Levenshtein.distance(pred, ref)
         levenshtein_distances.append(lev_dist)
 
-        # Normalized Levenshtein (0-1, where 1 is identical)
         max_len = max(len(pred), len(ref))
         normalized_levenshtein.append(1 - (lev_dist / max_len) if max_len > 0 else 1.0)
 
@@ -144,17 +140,14 @@ def evaluate_model(model, tokenizer, test_examples: list[dict[str, Any]], model_
     for idx, example in enumerate(test_examples):
         print(f"[{idx+1}/{len(test_examples)}] Processing example...", flush=True)
 
-        # Extract HTML from user message
         user_msg = example["messages"][0]["content"]
         html_start = user_msg.find("HTML:\n") + 6
         html = user_msg[html_start:]
 
         print(f"  HTML length: {len(html)} chars", flush=True)
 
-        # Get reference JSON from assistant message
         reference = example["messages"][1]["content"]
 
-        # Run inference
         try:
             print(f"  Running inference...", flush=True)
             prediction = run_inference(model, tokenizer, html)
@@ -166,7 +159,6 @@ def evaluate_model(model, tokenizer, test_examples: list[dict[str, Any]], model_
 
         references.append(reference)
 
-    # Compute metrics
     print(f"Computing metrics...", flush=True)
     metrics = compute_metrics(predictions, references)
 
@@ -201,11 +193,9 @@ def print_comparison_table(base_results: dict, finetuned_results: dict):
         ft_val = finetuned_results['metrics'][metric]
 
         if metric == "levenshtein_avg":
-            # Lower is better for raw Levenshtein
             improvement = ((base_val - ft_val) / base_val) * 100 if base_val > 0 else 0
             improvement_str = f"{improvement:+.2f}%"
         else:
-            # Higher is better for other metrics
             improvement = ((ft_val - base_val) / base_val) * 100 if base_val > 0 else 0
             improvement_str = f"{improvement:+.2f}%"
 
@@ -220,16 +210,13 @@ def main():
     print("CrawlerLM Model Comparison Evaluation (Transformers)")
     print("=" * 80)
 
-    # Check GPU availability
     print(f"\nGPU available: {torch.cuda.is_available()}")
     if torch.cuda.is_available():
         print(f"GPU device: {torch.cuda.get_device_name(0)}")
         print(f"GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
 
-    # Load test data (limit to 5 for quick test)
     test_examples = load_test_data(max_examples=5)
 
-    # Evaluate base model
     print("\n" + "=" * 80)
     print("PHASE 1: Evaluating Base Model")
     print("=" * 80)
@@ -238,13 +225,11 @@ def main():
     base_tokenizer, base_model = load_base_model()
     base_results = evaluate_model(base_model, base_tokenizer, test_examples, "Qwen3-0.6B (Base)")
 
-    # Free memory
     print("\nFreeing base model from memory...")
     del base_model
     del base_tokenizer
     torch.cuda.empty_cache()
 
-    # Evaluate fine-tuned model
     print("\n" + "=" * 80)
     print("PHASE 2: Evaluating Fine-tuned Model")
     print("=" * 80)
@@ -253,20 +238,16 @@ def main():
     ft_tokenizer, ft_model = load_finetuned_model()
     finetuned_results = evaluate_model(ft_model, ft_tokenizer, test_examples, "CrawlerLM-Qwen3-0.6B")
 
-    # Free memory
     print("\nFreeing fine-tuned model from memory...")
     del ft_model
     del ft_tokenizer
     torch.cuda.empty_cache()
 
-    # Print comparison
     print_comparison_table(base_results, finetuned_results)
 
-    # Save detailed results
     output_dir = Path("eval_results")
     output_dir.mkdir(exist_ok=True, parents=True)
 
-    # Save comparison summary
     comparison = {
         "base_model": {
             "name": base_results["model_name"],
@@ -299,7 +280,6 @@ def main():
     with open(output_dir / "comparison_summary.json", "w") as f:
         json.dump(comparison, f, indent=2)
 
-    # Save detailed samples for inspection
     samples = []
     for idx in range(len(test_examples)):
         sample = {
@@ -313,12 +293,10 @@ def main():
     with open(output_dir / "samples.json", "w") as f:
         json.dump(samples, f, indent=2)
 
-    # Print samples to stdout for easy viewing
     print("\n" + "=" * 80)
     print("SAMPLE OUTPUTS (5 examples)")
     print("=" * 80)
     for idx, sample in enumerate(samples):
-        # Get HTML from test example
         user_msg = test_examples[idx]["messages"][0]["content"]
         html_start = user_msg.find("HTML:\n") + 6
         html = user_msg[html_start:]

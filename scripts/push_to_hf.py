@@ -11,7 +11,6 @@ from pathlib import Path
 from datasets import Dataset, DatasetDict
 from huggingface_hub import HfApi
 
-# Paths
 TRAIN_CHAT_PATH = Path("data/processed/train_chat.jsonl")
 VAL_CHAT_PATH = Path("data/processed/val_chat.jsonl")
 TEST_CHAT_PATH = Path("data/processed/test_chat.jsonl")
@@ -41,12 +40,10 @@ def create_dataset() -> DatasetDict:
     test_data = load_jsonl(TEST_CHAT_PATH)
     print(f"  Loaded {len(test_data)} test examples")
 
-    # Create datasets
     train_dataset = Dataset.from_list(train_data)
     val_dataset = Dataset.from_list(val_data)
     test_dataset = Dataset.from_list(test_data)
 
-    # Create DatasetDict
     dataset_dict = DatasetDict({
         "train": train_dataset,
         "validation": val_dataset,
@@ -114,7 +111,6 @@ def main():
     )
     args = parser.parse_args()
 
-    # Validate repository ID
     if "/" not in args.repo_id:
         print("❌ Invalid repository ID. Must be in format: username/dataset-name")
         return
@@ -124,7 +120,6 @@ def main():
     print("=" * 60)
     print(f"\nRepository: {args.repo_id}")
 
-    # README-only mode
     if args.readme_only:
         print("Mode: README only")
         try:
@@ -137,13 +132,10 @@ def main():
             print("  hf auth login")
         return
 
-    # Full dataset upload mode
     print(f"Private: {args.private}")
 
-    # Create dataset
     dataset_dict = create_dataset()
 
-    # Show dataset info
     print("\nDataset structure:")
     print(dataset_dict)
 
@@ -151,11 +143,9 @@ def main():
     example = dataset_dict["train"][0]
     print(str(example)[:500] + "...")
 
-    # Push to hub
     try:
         push_to_hub(dataset_dict, args.repo_id, args.private)
 
-        # Upload README unless skipped
         if not args.skip_readme:
             upload_readme(args.repo_id)
 

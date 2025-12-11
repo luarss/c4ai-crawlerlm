@@ -7,12 +7,14 @@ URLs from their index without needing to download WARC files.
 
 import json
 import random
-from pathlib import Path
-from typing import List, Dict
-from tqdm import tqdm
 import time
-import httpx
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+from typing import Dict, List
+from urllib.parse import urlparse
+
+import httpx
+from tqdm import tqdm
 
 random.seed(42)
 
@@ -35,7 +37,6 @@ def sample_urls_from_index(
     """Sample URLs from a Common Crawl index."""
     base_url = f"https://index.commoncrawl.org/{index_id}-index"
 
-    # Query patterns to get diverse content
     query_pattern = "*"
 
     params = {
@@ -62,7 +63,6 @@ def sample_urls_from_index(
                 try:
                     record = json.loads(line)
 
-                    # Filter for HTML content
                     mime = record.get('mime', '')
                     status = record.get('status', '')
                     url = record.get('url', '')
@@ -70,7 +70,6 @@ def sample_urls_from_index(
                     if 'text/html' not in mime or status != '200':
                         continue
 
-                    # Extract domain for diversity
                     if domain_diversity:
                         domain = extract_domain(url)
                         if domain in seen_domains:
@@ -100,9 +99,7 @@ def sample_urls_from_index(
 
 def extract_domain(url: str) -> str:
     """Extract domain from URL."""
-    from urllib.parse import urlparse
-    parsed = urlparse(url)
-    return parsed.netloc
+    return urlparse(url).netloc
 
 
 def fetch_and_validate_single_url(url_data: Dict, timeout: int = 10) -> tuple:
@@ -113,20 +110,16 @@ def fetch_and_validate_single_url(url_data: Dict, timeout: int = 10) -> tuple:
         with httpx.Client(timeout=timeout, follow_redirects=True) as client:
             response = client.get(url)
 
-            # Check status code
             if response.status_code != 200:
                 return (False, url_data, None)
 
-            # Check content type
             content_type = response.headers.get('content-type', '').lower()
             if 'text/html' not in content_type:
                 return (False, url_data, None)
 
-            # Check minimum content length
             if len(response.text) < 500:
                 return (False, url_data, None)
 
-            # Check for HTML tags
             html_lower = response.text.lower()
             if '<html' not in html_lower and '<body' not in html_lower:
                 return (False, url_data, None)
@@ -150,28 +143,23 @@ def validate_and_save_urls(urls: List[Dict], output_dir: Path, max_workers: int 
         url_data_copy['assigned_id'] = idx
         url_data_with_id.append(url_data_copy)
 
-    # Use ThreadPoolExecutor for parallel fetching
-    results = {}  # Store by assigned_id
+    results = {}
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Submit all tasks
         future_to_url = {
             executor.submit(fetch_and_validate_single_url, url_data): url_data
             for url_data in url_data_with_id
         }
 
-        # Process completed tasks with progress bar
         for future in tqdm(as_completed(future_to_url), total=len(urls), desc="Fetching & saving HTML"):
             success, url_data, html_content = future.result()
 
             if success and html_content:
                 assigned_id = url_data['assigned_id']
 
-                # Save HTML to file using assigned ID (not completion order)
                 html_file = output_dir / f"{assigned_id:04d}.html"
                 with open(html_file, "w", encoding="utf-8") as f:
                     f.write(html_content)
 
-                # Store result
                 results[assigned_id] = {
                     "id": assigned_id,
                     "url": url_data['url'],
@@ -181,7 +169,6 @@ def validate_and_save_urls(urls: List[Dict], output_dir: Path, max_workers: int 
                     "timestamp": url_data.get('timestamp', ''),
                 }
 
-    # Convert to sorted list
     valid_urls = [results[id] for id in sorted(results.keys())]
 
     print(f"✓ {len(valid_urls)} URLs fetched and saved ({len(urls) - len(valid_urls)} failed)")
@@ -190,14 +177,13 @@ def validate_and_save_urls(urls: List[Dict], output_dir: Path, max_workers: int 
 
 def sample_by_category(index_id: str, urls_per_category: int = 10) -> List[Dict]:
     """Sample URLs from different categories/domains with domain deduplication."""
-    # Different domain patterns to ensure diversity
     patterns = [
-        "*.edu/*",      # Educational
-        "*.org/*",      # Organizations
-        "*.gov/*",      # Government
-        "*.com/*",      # Commercial
-        "*.io/*",       # Tech
-        "*.net/*",      # Networks
+        "*.edu/*",
+        "*.org/*",
+        "*.gov/*",
+        "*.com/*",
+        "*.io/*",
+        "*.net/*",
     ]
 
     all_results = []
@@ -207,14 +193,13 @@ def sample_by_category(index_id: str, urls_per_category: int = 10) -> List[Dict]
         params = {
             "url": pattern,
             "output": "json",
-            "limit": urls_per_category * 50,  # Fetch many more for random sampling
+            "limit": urls_per_category * 50,
         }
 
         try:
             response = httpx.get(base_url, params=params, timeout=30)
             response.raise_for_status()
 
-            # Collect all candidates first
             candidates = []
             for line in response.iter_lines():
                 if not line:
@@ -223,7 +208,6 @@ def sample_by_category(index_id: str, urls_per_category: int = 10) -> List[Dict]
                 try:
                     record = json.loads(line)
 
-                    # Filter for HTML
                     if 'text/html' in record.get('mime', '') and record.get('status') == '200':
                         url = record.get('url')
                         domain = extract_domain(url)
@@ -238,10 +222,8 @@ def sample_by_category(index_id: str, urls_per_category: int = 10) -> List[Dict]
                 except json.JSONDecodeError:
                     continue
 
-            # Randomly shuffle candidates
             random.shuffle(candidates)
 
-            # Pick unique domains
             category_results = []
             seen_domains = set()
 
@@ -259,20 +241,18 @@ def sample_by_category(index_id: str, urls_per_category: int = 10) -> List[Dict]
 
             print(f"  {pattern}: {len(category_results)} unique domains")
             all_results.extend(category_results)
-            time.sleep(0.5)  # Rate limiting
+            time.sleep(0.5)
 
         except Exception as e:
             print(f"Error fetching {pattern}: {e}")
             continue
 
-    # Shuffle for more randomness
     random.shuffle(all_results)
     return all_results
 
 
 def main():
     """Main execution function."""
-    # Get latest index
     print("Fetching available Common Crawl indexes...")
     indexes = get_available_indexes()
     latest_index = indexes[0]
@@ -280,24 +260,19 @@ def main():
     print(f"Using index: {latest_index}")
     print(f"Available indexes: {len(indexes)}")
 
-    # Output directory for HTML files
     html_output_dir = Path("data/raw_html")
 
-    # Sample diverse URLs (fetch extra to account for validation failures)
     sampled_urls = sample_by_category(
         index_id=latest_index,
         urls_per_category=150
     )
 
-    # Validate and save URLs directly to data/raw_html
     valid_urls = validate_and_save_urls(sampled_urls, html_output_dir)
 
-    # If we need more valid URLs, sample again
     target_count = 800
     if len(valid_urls) < target_count:
         print(f"\nNeed {target_count - len(valid_urls)} more valid URLs...")
 
-        # Track already seen domains to avoid duplicates
         seen_domains = {url_data['domain'] for url_data in valid_urls}
 
         additional = sample_by_category(
@@ -305,7 +280,6 @@ def main():
             urls_per_category=50
         )
 
-        # Filter out URLs with domains we've already seen
         additional_filtered = [
             url_data for url_data in additional
             if url_data['domain'] not in seen_domains
@@ -316,7 +290,6 @@ def main():
         more_valid = validate_and_save_urls(additional_filtered, html_output_dir)
         valid_urls.extend(more_valid)
 
-    # Final deduplication by URL (keep first occurrence)
     seen_urls = set()
     final_urls = []
     duplicates_removed = 0
@@ -334,7 +307,6 @@ def main():
 
     valid_urls = final_urls
 
-    # Save manifest
     manifest_file = html_output_dir / "dataset_manifest.json"
     with open(manifest_file, "w") as f:
         json.dump(final_urls, f, indent=2)

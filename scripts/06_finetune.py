@@ -20,8 +20,6 @@ This script uses HuggingFace TRL for supervised fine-tuning with LoRA adapters.
 Designed to run on HuggingFace Jobs infrastructure with T4 GPU.
 """
 
-import os
-import json
 from datasets import load_dataset
 from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments
 from trl import SFTTrainer, DataCollatorForCompletionOnlyLM
@@ -30,16 +28,14 @@ from rouge_score import rouge_scorer
 import Levenshtein
 from tqdm import tqdm
 
-# Configuration
 MODEL_NAME = "Qwen/Qwen3-0.6B"
 DATASET_NAME = "espsluar/crawlerlm-html-to-json"
 OUTPUT_DIR = "./results/qwen-crawlerlm-sft"
 HF_HUB_MODEL_ID = "espsluar/qwen-crawlerlm-sft"
 
-# Training hyperparameters
-MAX_SEQ_LENGTH = 8192  # Qwen2.5 supports up to 128K, but start conservatively
-BATCH_SIZE = 2  # Small batch for T4 (16GB VRAM)
-GRADIENT_ACCUMULATION_STEPS = 8  # Effective batch size = 16
+MAX_SEQ_LENGTH = 8192
+BATCH_SIZE = 2
+GRADIENT_ACCUMULATION_STEPS = 8
 LEARNING_RATE = 2e-5
 NUM_EPOCHS = 3
 WARMUP_RATIO = 0.1
@@ -52,7 +48,6 @@ def format_chat_template(example, tokenizer):
     Format the dataset examples using the chat template.
     Dataset already has 'messages' field with user/assistant roles.
     """
-    # Apply the model's chat template
     formatted = tokenizer.apply_chat_template(
         example["messages"],
         tokenize=False,
@@ -61,12 +56,7 @@ def format_chat_template(example, tokenizer):
     return {"text": formatted}
 
 def evaluate_model(model, tokenizer, test_dataset, device="cuda"):
-    """
-    Evaluate the model on test set using ROUGE and Levenshtein metrics.
-
-    Returns:
-        dict: Evaluation metrics including ROUGE-1, ROUGE-2, ROUGE-L, and Levenshtein distance
-    """
+    """Evaluate the model on test set using ROUGE and Levenshtein metrics."""
     print("\n" + "="*60)
     print("Evaluating on test set...")
     print("="*60)
@@ -79,14 +69,11 @@ def evaluate_model(model, tokenizer, test_dataset, device="cuda"):
     rougeL_scores = []
     levenshtein_distances = []
 
-    # Process each test example
     for example in tqdm(test_dataset, desc="Evaluating"):
-        # Get the user message (HTML input)
         messages = example["messages"]
         user_message = [msg for msg in messages if msg["role"] == "user"][0]["content"]
         expected_output = [msg for msg in messages if msg["role"] == "assistant"][0]["content"]
 
-        # Create input with generation prompt
         input_messages = [{"role": "user", "content": user_message}]
         input_text = tokenizer.apply_chat_template(
             input_messages,
@@ -94,7 +81,6 @@ def evaluate_model(model, tokenizer, test_dataset, device="cuda"):
             add_generation_prompt=True
         )
 
-        # Generate prediction
         inputs = tokenizer(input_text, return_tensors="pt", truncation=True, max_length=MAX_SEQ_LENGTH).to(device)
 
         with torch.no_grad():
@@ -106,21 +92,17 @@ def evaluate_model(model, tokenizer, test_dataset, device="cuda"):
                 top_p=None,
             )
 
-        # Decode only the generated tokens (skip the input)
         generated_ids = outputs[0][inputs.input_ids.shape[1]:]
         predicted_output = tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
 
-        # Calculate ROUGE scores
         rouge_scores = scorer.score(expected_output, predicted_output)
         rouge1_scores.append(rouge_scores['rouge1'].fmeasure)
         rouge2_scores.append(rouge_scores['rouge2'].fmeasure)
         rougeL_scores.append(rouge_scores['rougeL'].fmeasure)
 
-        # Calculate Levenshtein distance
         lev_distance = Levenshtein.distance(expected_output, predicted_output)
         levenshtein_distances.append(lev_distance)
 
-    # Calculate average metrics
     results = {
         "rouge1": sum(rouge1_scores) / len(rouge1_scores),
         "rouge2": sum(rouge2_scores) / len(rouge2_scores),
@@ -146,22 +128,18 @@ def main():
     print(f"Epochs: {NUM_EPOCHS}")
     print("="*60)
 
-    # Load tokenizer
     print("\n[1/6] Loading tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
 
-    # Ensure pad token is set
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    # Load dataset
     print("\n[2/6] Loading dataset...")
     dataset = load_dataset(DATASET_NAME)
     print(f"  Train examples: {len(dataset['train'])}")
     print(f"  Validation examples: {len(dataset['validation'])}")
     print(f"  Test examples: {len(dataset['test'])}")
 
-    # Format dataset with chat template
     print("\n[3/6] Formatting dataset with chat template...")
     train_dataset = dataset["train"].map(
         lambda x: format_chat_template(x, tokenizer),
@@ -175,7 +153,6 @@ def main():
     print(f"  Example formatted text (first 500 chars):")
     print(f"  {train_dataset[0]['text'][:500]}...")
 
-    # Load model
     print("\n[4/6] Loading model...")
     model = AutoModelForCausalLM.from_pretrained(
         MODEL_NAME,
@@ -184,18 +161,14 @@ def main():
         trust_remote_code=True,
     )
 
-    # Enable gradient checkpointing for memory efficiency
     model.gradient_checkpointing_enable()
 
-    # Prepare response template for completion-only training
-    # We only compute loss on the assistant's response
     response_template = "<|im_start|>assistant"
     collator = DataCollatorForCompletionOnlyLM(
         response_template=response_template,
         tokenizer=tokenizer
     )
 
-    # Training arguments
     print("\n[5/6] Setting up training arguments...")
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
@@ -213,7 +186,7 @@ def main():
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
         greater_is_better=False,
-        bf16=True,  # Use bfloat16 for training
+        bf16=True,
         gradient_checkpointing=True,
         report_to=["tensorboard"],
         hub_model_id=HF_HUB_MODEL_ID,
@@ -221,7 +194,6 @@ def main():
         hub_strategy="every_save",
     )
 
-    # Initialize trainer
     print("\n[6/6] Initializing SFT Trainer...")
     trainer = SFTTrainer(
         model=model,
@@ -234,14 +206,12 @@ def main():
         dataset_text_field="text",
     )
 
-    # Start training
     print("\n" + "="*60)
     print("Starting training...")
     print("="*60 + "\n")
 
     trainer.train()
 
-    # Save final model
     print("\n" + "="*60)
     print("Training complete! Saving final model...")
     print("="*60)
@@ -249,7 +219,6 @@ def main():
     trainer.save_model(OUTPUT_DIR)
     tokenizer.save_pretrained(OUTPUT_DIR)
 
-    # Push to hub
     print("\nPushing to HuggingFace Hub...")
     trainer.push_to_hub()
 
