@@ -1,11 +1,12 @@
 """Script to fetch web content using Exa API."""
 
-import os
 import json
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+
 from dotenv import load_dotenv
 from exa_py import Exa
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 
 load_dotenv()
@@ -16,10 +17,10 @@ NUM_WORKERS = 5
 def load_urls(file_path: str) -> list[str]:
     """Load URLs from text file (one per line)."""
     urls = []
-    with open(file_path, 'r') as f:
+    with open(file_path) as f:
         for line in f:
             line = line.strip()
-            if line and line.startswith('http'):
+            if line and line.startswith("http"):
                 urls.append(line)
 
     print(f"Loaded {len(urls)} URLs from {file_path}")
@@ -32,19 +33,21 @@ def fetch_batch(exa: Exa, batch_urls: list[str]) -> tuple[list[dict], float]:
 
     batch_data = []
     for r in result.results:
-        batch_data.append({
-            "url": r.url,
-            "title": r.title,
-            "text": r.text,
-            "author": r.author,
-            "published_date": r.published_date,
-            "image": r.image,
-            "favicon": r.favicon,
-            "id": r.id,
-        })
+        batch_data.append(
+            {
+                "url": r.url,
+                "title": r.title,
+                "text": r.text,
+                "author": r.author,
+                "published_date": r.published_date,
+                "image": r.image,
+                "favicon": r.favicon,
+                "id": r.id,
+            }
+        )
 
     # Extract cost from result
-    cost = result.cost_dollars.total if hasattr(result, 'cost_dollars') else 0.0
+    cost = result.cost_dollars.total if hasattr(result, "cost_dollars") else 0.0
     return batch_data, cost
 
 
@@ -52,9 +55,7 @@ def main():
     """Main execution function."""
     api_key = os.getenv("EXA_API_KEY")
     if not api_key:
-        raise ValueError(
-            "EXA_API_KEY not found. Please set it in .env file or environment."
-        )
+        raise ValueError("EXA_API_KEY not found. Please set it in .env file or environment.")
 
     exa = Exa(api_key=api_key)
 
@@ -67,7 +68,7 @@ def main():
 
     # Split URLs into batches for parallel processing
     batch_size = max(1, len(urls) // NUM_WORKERS)
-    batches = [urls[i:i + batch_size] for i in range(0, len(urls), batch_size)]
+    batches = [urls[i : i + batch_size] for i in range(0, len(urls), batch_size)]
 
     print(f"Fetching content for {len(urls)} URLs using {NUM_WORKERS} workers...")
     print(f"Processing {len(batches)} batches")
@@ -89,10 +90,10 @@ def main():
 
     output_file = output_dir / "exa_contents.json"
 
-    with open(output_file, 'w') as f:
+    with open(output_file, "w") as f:
         json.dump(results_data, f, indent=2)
 
-    print(f"\nFetch complete!")
+    print("\nFetch complete!")
     print(f"Saved {len(results_data)} results to {output_file}")
     print(f"Total cost: ${total_cost:.4f}")
 

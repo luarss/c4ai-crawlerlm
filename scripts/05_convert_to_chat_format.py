@@ -8,8 +8,9 @@ expected by Qwen3 models for fine-tuning.
 
 import json
 from pathlib import Path
-from tqdm import tqdm
+
 from qwen_utils import count_chat_tokens
+from tqdm import tqdm
 
 TRAIN_INPUT = Path("data/processed/train.jsonl")
 VAL_INPUT = Path("data/processed/val.jsonl")
@@ -42,17 +43,14 @@ def convert_to_chat_format(example: dict) -> dict:
     user_content = f"""Extract structured data from the following HTML and return it as JSON.
 
 HTML:
-{example['example_html']}
+{example["example_html"]}
 
 Return a JSON object with these fields: url, title, text, author, published_date, image, favicon, id"""
 
-    assistant_content = json.dumps(example['expected_json'], ensure_ascii=False, indent=2)
+    assistant_content = json.dumps(example["expected_json"], ensure_ascii=False, indent=2)
 
     chat_example = {
-        "messages": [
-            {"role": "user", "content": user_content},
-            {"role": "assistant", "content": assistant_content}
-        ]
+        "messages": [{"role": "user", "content": user_content}, {"role": "assistant", "content": assistant_content}]
     }
 
     return chat_example
@@ -83,9 +81,9 @@ def convert_file(input_path: Path, output_path: Path):
         else:
             filtered_count += 1
 
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         for chat_example in chat_examples:
-            f.write(json.dumps(chat_example, ensure_ascii=False) + '\n')
+            f.write(json.dumps(chat_example, ensure_ascii=False) + "\n")
 
     print(f"  ✓ Wrote {len(chat_examples)} examples to {output_path}")
     if filtered_count > 0:
@@ -103,7 +101,7 @@ def main():
     convert_file(TEST_INPUT, TEST_OUTPUT)
 
     print("\n✓ Conversion complete!")
-    print(f"\nOutput files:")
+    print("\nOutput files:")
     print(f"  - {TRAIN_OUTPUT}")
     print(f"  - {VAL_OUTPUT}")
     print(f"  - {TEST_OUTPUT}")

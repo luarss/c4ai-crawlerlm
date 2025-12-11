@@ -4,8 +4,8 @@ Common utilities for the CrawlerLM pipeline.
 """
 
 from functools import lru_cache
-from transformers import AutoTokenizer
 
+from transformers import AutoTokenizer
 
 QWEN_MODEL = "Qwen/Qwen2.5-0.5B"
 
@@ -25,9 +25,5 @@ def count_tokens(text: str) -> int:
 def count_chat_tokens(messages: list[dict]) -> int:
     """Count tokens for a chat format conversation."""
     tokenizer = get_tokenizer()
-    text = tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=False
-    )
+    text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
     return len(tokenizer.encode(text))

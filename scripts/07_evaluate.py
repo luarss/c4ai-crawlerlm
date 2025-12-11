@@ -23,7 +23,7 @@ Usage:
 
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import Levenshtein
 import torch
@@ -33,7 +33,9 @@ from rouge_score import rouge_scorer
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-def load_test_data(dataset_name: str = "espsluar/crawlerlm-html-to-json", max_examples: Optional[int] = None) -> list[dict[str, Any]]:
+def load_test_data(
+    dataset_name: str = "espsluar/crawlerlm-html-to-json", max_examples: int | None = None
+) -> list[dict[str, Any]]:
     """Load test dataset from HuggingFace Hub."""
     print(f"Loading test data from {dataset_name}...")
     ds = load_dataset(dataset_name, split="test")
@@ -63,8 +65,7 @@ def load_base_model(model_id: str = "Qwen/Qwen3-0.6B"):
     return tokenizer, model
 
 
-def load_finetuned_model(base_model_id: str = "Qwen/Qwen3-0.6B",
-                         adapter_id: str = "espsluar/qwen-crawlerlm-sft"):
+def load_finetuned_model(base_model_id: str = "Qwen/Qwen3-0.6B", adapter_id: str = "espsluar/qwen-crawlerlm-sft"):
     """Load fine-tuned model with LoRA adapter."""
     print(f"Loading fine-tuned model: {base_model_id} + {adapter_id}")
 
@@ -96,13 +97,13 @@ def run_inference(model, tokenizer, html: str, max_new_tokens: int = 1024) -> st
             do_sample=True,
         )
 
-    generated_text = tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
+    generated_text = tokenizer.decode(outputs[0][inputs.input_ids.shape[1] :], skip_special_tokens=True)
     return generated_text.strip()
 
 
 def compute_metrics(predictions: list[str], references: list[str]) -> dict[str, float]:
     """Compute ROUGE and Levenshtein metrics."""
-    scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
+    scorer = rouge_scorer.RougeScorer(["rouge1", "rouge2", "rougeL"], use_stemmer=True)
 
     rouge1_scores = []
     rouge2_scores = []
@@ -110,11 +111,11 @@ def compute_metrics(predictions: list[str], references: list[str]) -> dict[str, 
     levenshtein_distances = []
     normalized_levenshtein = []
 
-    for pred, ref in zip(predictions, references):
+    for pred, ref in zip(predictions, references, strict=True):
         scores = scorer.score(ref, pred)
-        rouge1_scores.append(scores['rouge1'].fmeasure)
-        rouge2_scores.append(scores['rouge2'].fmeasure)
-        rougeL_scores.append(scores['rougeL'].fmeasure)
+        rouge1_scores.append(scores["rouge1"].fmeasure)
+        rouge2_scores.append(scores["rouge2"].fmeasure)
+        rougeL_scores.append(scores["rougeL"].fmeasure)
 
         lev_dist = Levenshtein.distance(pred, ref)
         levenshtein_distances.append(lev_dist)
@@ -127,7 +128,9 @@ def compute_metrics(predictions: list[str], references: list[str]) -> dict[str, 
         "rouge2": sum(rouge2_scores) / len(rouge2_scores) if rouge2_scores else 0.0,
         "rougeL": sum(rougeL_scores) / len(rougeL_scores) if rougeL_scores else 0.0,
         "levenshtein_avg": sum(levenshtein_distances) / len(levenshtein_distances) if levenshtein_distances else 0.0,
-        "levenshtein_normalized": sum(normalized_levenshtein) / len(normalized_levenshtein) if normalized_levenshtein else 0.0,
+        "levenshtein_normalized": sum(normalized_levenshtein) / len(normalized_levenshtein)
+        if normalized_levenshtein
+        else 0.0,
     }
 
 
@@ -138,7 +141,7 @@ def evaluate_model(model, tokenizer, test_examples: list[dict[str, Any]], model_
 
     print(f"\nEvaluating {model_name}...")
     for idx, example in enumerate(test_examples):
-        print(f"[{idx+1}/{len(test_examples)}] Processing example...", flush=True)
+        print(f"[{idx + 1}/{len(test_examples)}] Processing example...", flush=True)
 
         user_msg = example["messages"][0]["content"]
         html_start = user_msg.find("HTML:\n") + 6
@@ -149,7 +152,7 @@ def evaluate_model(model, tokenizer, test_examples: list[dict[str, Any]], model_
         reference = example["messages"][1]["content"]
 
         try:
-            print(f"  Running inference...", flush=True)
+            print("  Running inference...", flush=True)
             prediction = run_inference(model, tokenizer, html)
             print(f"  ✓ Generated {len(prediction)} chars", flush=True)
             predictions.append(prediction)
@@ -159,7 +162,7 @@ def evaluate_model(model, tokenizer, test_examples: list[dict[str, Any]], model_
 
         references.append(reference)
 
-    print(f"Computing metrics...", flush=True)
+    print("Computing metrics...", flush=True)
     metrics = compute_metrics(predictions, references)
 
     return {
@@ -189,8 +192,8 @@ def print_comparison_table(base_results: dict, finetuned_results: dict):
     print("-" * 80)
 
     for metric in metrics_order:
-        base_val = base_results['metrics'][metric]
-        ft_val = finetuned_results['metrics'][metric]
+        base_val = base_results["metrics"][metric]
+        ft_val = finetuned_results["metrics"][metric]
 
         if metric == "levenshtein_avg":
             improvement = ((base_val - ft_val) / base_val) * 100 if base_val > 0 else 0
@@ -262,7 +265,7 @@ def main():
         "improvements": {},
     }
 
-    for metric in base_results["metrics"].keys():
+    for metric in base_results["metrics"]:
         base_val = base_results["metrics"][metric]
         ft_val = finetuned_results["metrics"][metric]
 

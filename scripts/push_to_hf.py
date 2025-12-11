@@ -8,6 +8,7 @@ This script uploads the train/test splits to HuggingFace Hub.
 import argparse
 import json
 from pathlib import Path
+
 from datasets import Dataset, DatasetDict
 from huggingface_hub import HfApi
 
@@ -44,11 +45,13 @@ def create_dataset() -> DatasetDict:
     val_dataset = Dataset.from_list(val_data)
     test_dataset = Dataset.from_list(test_data)
 
-    dataset_dict = DatasetDict({
-        "train": train_dataset,
-        "validation": val_dataset,
-        "test": test_dataset,
-    })
+    dataset_dict = DatasetDict(
+        {
+            "train": train_dataset,
+            "validation": val_dataset,
+            "test": test_dataset,
+        }
+    )
 
     return dataset_dict
 
@@ -82,33 +85,16 @@ def upload_readme(repo_id: str):
         repo_type="dataset",
     )
 
-    print(f"✓ README uploaded successfully!")
+    print("✓ README uploaded successfully!")
 
 
 def main():
     """Main entry point."""
-    parser = argparse.ArgumentParser(
-        description="Push CrawlerLM dataset to HuggingFace Hub"
-    )
-    parser.add_argument(
-        "repo_id",
-        help="HuggingFace repository ID (format: username/dataset-name)"
-    )
-    parser.add_argument(
-        "--private",
-        action="store_true",
-        help="Make the dataset private"
-    )
-    parser.add_argument(
-        "--skip-readme",
-        action="store_true",
-        help="Skip uploading README file"
-    )
-    parser.add_argument(
-        "--readme-only",
-        action="store_true",
-        help="Upload only README file (skip dataset upload)"
-    )
+    parser = argparse.ArgumentParser(description="Push CrawlerLM dataset to HuggingFace Hub")
+    parser.add_argument("repo_id", help="HuggingFace repository ID (format: username/dataset-name)")
+    parser.add_argument("--private", action="store_true", help="Make the dataset private")
+    parser.add_argument("--skip-readme", action="store_true", help="Skip uploading README file")
+    parser.add_argument("--readme-only", action="store_true", help="Upload only README file (skip dataset upload)")
     args = parser.parse_args()
 
     if "/" not in args.repo_id:
@@ -124,7 +110,7 @@ def main():
         print("Mode: README only")
         try:
             upload_readme(args.repo_id)
-            print(f"\n🎉 README uploaded! View at:")
+            print("\n🎉 README uploaded! View at:")
             print(f"   https://huggingface.co/datasets/{args.repo_id}")
         except Exception as e:
             print(f"\n❌ Error uploading README: {e}")
@@ -149,7 +135,7 @@ def main():
         if not args.skip_readme:
             upload_readme(args.repo_id)
 
-        print(f"\n🎉 All done! View your dataset at:")
+        print("\n🎉 All done! View your dataset at:")
         print(f"   https://huggingface.co/datasets/{args.repo_id}")
 
     except Exception as e:

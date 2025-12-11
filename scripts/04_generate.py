@@ -19,21 +19,19 @@ import json
 import random
 import re
 from pathlib import Path
-from typing import Dict, List
 
 from bs4 import BeautifulSoup, Comment
-
 
 random.seed(42)
 
 
-def load_golden_dataset(path: Path) -> List[Dict]:
+def load_golden_dataset(path: Path) -> list[dict]:
     """Load golden dataset from JSONL."""
     with open(path) as f:
         return [json.loads(line) for line in f]
 
 
-def split_test_set(examples: List[Dict], test_size: int = 50) -> tuple:
+def split_test_set(examples: list[dict], test_size: int = 50) -> tuple:
     """Split out test set as holdout."""
     shuffled = examples.copy()
     random.shuffle(shuffled)
@@ -44,21 +42,18 @@ def split_test_set(examples: List[Dict], test_size: int = 50) -> tuple:
     return remaining, test_examples
 
 
-def add_wrapper_divs(html: str, num_wrappers: int = None) -> str:
+def add_wrapper_divs(html: str, num_wrappers: int | None = None) -> str:
     """Add random wrapper div elements."""
     if num_wrappers is None:
         num_wrappers = random.randint(1, 3)
 
-    soup = BeautifulSoup(html, 'html.parser')
-    body = soup.find('body')
+    soup = BeautifulSoup(html, "html.parser")
+    body = soup.find("body")
 
     if body:
         for _ in range(num_wrappers):
-            wrapper_classes = [
-                'container', 'wrapper', 'content', 'main',
-                'page-wrapper', 'site-content', 'app-root'
-            ]
-            wrapper = soup.new_tag('div', attrs={'class': random.choice(wrapper_classes)})
+            wrapper_classes = ["container", "wrapper", "content", "main", "page-wrapper", "site-content", "app-root"]
+            wrapper = soup.new_tag("div", attrs={"class": random.choice(wrapper_classes)})
 
             for child in list(body.children):
                 wrapper.append(child)
@@ -70,7 +65,7 @@ def add_wrapper_divs(html: str, num_wrappers: int = None) -> str:
 
 def add_random_attributes(html: str) -> str:
     """Add random attributes to existing elements."""
-    soup = BeautifulSoup(html, 'html.parser')
+    soup = BeautifulSoup(html, "html.parser")
 
     all_tags = soup.find_all(True)
 
@@ -79,31 +74,31 @@ def add_random_attributes(html: str) -> str:
 
     for tag in tags_to_modify:
         if random.random() < 0.5:
-            existing_classes = tag.get('class', [])
-            new_classes = existing_classes + [f'auto-{random.randint(1000, 9999)}']
-            tag['class'] = new_classes
+            existing_classes = tag.get("class", [])
+            new_classes = [*existing_classes, f"auto-{random.randint(1000, 9999)}"]
+            tag["class"] = new_classes
 
         if random.random() < 0.3:
-            tag[f'data-id'] = f'{random.randint(10000, 99999)}'
+            tag["data-id"] = f"{random.randint(10000, 99999)}"
 
         if random.random() < 0.2:
-            tag['aria-hidden'] = 'true'
+            tag["aria-hidden"] = "true"
 
     return str(soup)
 
 
 def inject_comments(html: str) -> str:
     """Inject HTML comments at random positions."""
-    soup = BeautifulSoup(html, 'html.parser')
-    body = soup.find('body')
+    soup = BeautifulSoup(html, "html.parser")
+    body = soup.find("body")
 
     if body:
         comments = [
-            ' Generated content ',
-            ' Auto-generated ',
-            ' SEO optimization ',
-            ' Analytics tracking ',
-            ' Ad placement ',
+            " Generated content ",
+            " Auto-generated ",
+            " SEO optimization ",
+            " Analytics tracking ",
+            " Ad placement ",
         ]
 
         for _ in range(random.randint(2, 5)):
@@ -119,19 +114,19 @@ def inject_comments(html: str) -> str:
 
 def inject_styles(html: str) -> str:
     """Inject inline style tags."""
-    soup = BeautifulSoup(html, 'html.parser')
-    head = soup.find('head')
+    soup = BeautifulSoup(html, "html.parser")
+    head = soup.find("head")
 
     if head:
         style_contents = [
-            '.hidden { display: none; }',
+            ".hidden { display: none; }",
             '.clearfix::after { content: ""; display: table; clear: both; }',
-            'body { margin: 0; padding: 0; }',
-            '* { box-sizing: border-box; }',
+            "body { margin: 0; padding: 0; }",
+            "* { box-sizing: border-box; }",
         ]
 
-        style_tag = soup.new_tag('style')
-        style_tag.string = '\n'.join(random.sample(style_contents, k=random.randint(1, 3)))
+        style_tag = soup.new_tag("style")
+        style_tag.string = "\n".join(random.sample(style_contents, k=random.randint(1, 3)))
         head.append(style_tag)
 
     return str(soup)
@@ -140,54 +135,54 @@ def inject_styles(html: str) -> str:
 def vary_whitespace(html: str) -> str:
     """Vary whitespace and formatting."""
     if random.random() < 0.5:
-        html = re.sub(r'(<div)', r'\n\1', html)
+        html = re.sub(r"(<div)", r"\n\1", html)
 
     if random.random() < 0.5:
-        html = re.sub(r'(>)(<)', r'>\n<', html)
+        html = re.sub(r"(>)(<)", r">\n<", html)
 
     return html
 
 
-def generate_variation(base_example: Dict, variation_id: int) -> Dict:
+def generate_variation(base_example: dict, variation_id: int) -> dict:
     """Generate a synthetic variation of a base example."""
-    html = base_example['example_html']
+    html = base_example["example_html"]
 
     augmentations = []
 
     if random.random() < 0.7:
         html = add_wrapper_divs(html)
-        augmentations.append('wrapper_divs')
+        augmentations.append("wrapper_divs")
 
     if random.random() < 0.6:
         html = add_random_attributes(html)
-        augmentations.append('random_attrs')
+        augmentations.append("random_attrs")
 
     if random.random() < 0.5:
         html = inject_comments(html)
-        augmentations.append('comments')
+        augmentations.append("comments")
 
     if random.random() < 0.4:
         html = inject_styles(html)
-        augmentations.append('styles')
+        augmentations.append("styles")
 
     if random.random() < 0.5:
         html = vary_whitespace(html)
-        augmentations.append('whitespace')
+        augmentations.append("whitespace")
 
     variation = {
-        'example_html': html,
-        'expected_json': base_example['expected_json'],
-        '_metadata': {
-            'variation_id': variation_id,
-            'base_url': base_example['expected_json']['url'],
-            'augmentations': augmentations,
+        "example_html": html,
+        "expected_json": base_example["expected_json"],
+        "_metadata": {
+            "variation_id": variation_id,
+            "base_url": base_example["expected_json"]["url"],
+            "augmentations": augmentations,
         },
     }
 
     return variation
 
 
-def generate_synthetic_dataset(base_examples: List[Dict], target_size: int) -> List[Dict]:
+def generate_synthetic_dataset(base_examples: list[dict], target_size: int) -> list[dict]:
     """Generate synthetic variations to reach target size."""
     synthetic_examples = []
 
@@ -215,24 +210,24 @@ def generate_synthetic_dataset(base_examples: List[Dict], target_size: int) -> L
     return synthetic_examples
 
 
-def save_dataset(examples: List[Dict], path: Path, strip_metadata: bool = True):
+def save_dataset(examples: list[dict], path: Path, strip_metadata: bool = True):
     """Save dataset to JSONL."""
-    with open(path, 'w') as f:
+    with open(path, "w") as f:
         for example in examples:
-            if strip_metadata and '_metadata' in example:
-                example_copy = {k: v for k, v in example.items() if k != '_metadata'}
-                f.write(json.dumps(example_copy) + '\n')
+            if strip_metadata and "_metadata" in example:
+                example_copy = {k: v for k, v in example.items() if k != "_metadata"}
+                f.write(json.dumps(example_copy) + "\n")
             else:
-                f.write(json.dumps(example) + '\n')
+                f.write(json.dumps(example) + "\n")
 
 
-def split_train_val(examples: List[Dict], train_size: int = 400, val_size: int = 50) -> tuple:
+def split_train_val(examples: list[dict], train_size: int = 400, val_size: int = 50) -> tuple:
     """Split synthetic examples into train and val."""
     shuffled = examples.copy()
     random.shuffle(shuffled)
 
     train_examples = shuffled[:train_size]
-    val_examples = shuffled[train_size:train_size + val_size]
+    val_examples = shuffled[train_size : train_size + val_size]
 
     return train_examples, val_examples
 
@@ -258,7 +253,7 @@ def main():
     synthetic_examples = generate_synthetic_dataset(remaining, target_synthetic_size)
     print(f"Total synthetic examples: {len(synthetic_examples)}")
 
-    print(f"\nSplitting synthetic into train/val...")
+    print("\nSplitting synthetic into train/val...")
     train_examples, val_examples = split_train_val(synthetic_examples, train_size=400, val_size=50)
     print(f"Train: {len(train_examples)} examples")
     print(f"Validation: {len(val_examples)} examples")
@@ -272,9 +267,9 @@ def main():
     print(f"✓ Validation set: {val_path} ({len(val_examples)} examples)")
     print(f"✓ Test set: {test_path} ({len(test_examples)} examples)")
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("DATASET GENERATION COMPLETE")
-    print("="*60)
+    print("=" * 60)
     print(f"Training examples: {len(train_examples)}")
     print(f"Validation examples: {len(val_examples)}")
     print(f"Test examples: {len(test_examples)}")

@@ -12,7 +12,6 @@ import json
 import re
 from collections import Counter
 from pathlib import Path
-from typing import Dict, List
 
 from bs4 import BeautifulSoup
 from qwen_utils import count_tokens
@@ -21,11 +20,13 @@ from qwen_utils import count_tokens
 def detect_spa_or_dynamic(html: str, soup: BeautifulSoup) -> bool:
     """Return True if page is SPA or heavily dynamic."""
     # Check for common SPA frameworks
-    if re.search(r'react|__NEXT_DATA__|_reactRoot|data-reactroot|vue\.js|__NUXT__|ng-app|angular\.js|svelte', html, re.I):
+    if re.search(
+        r"react|__NEXT_DATA__|_reactRoot|data-reactroot|vue\.js|__NUXT__|ng-app|angular\.js|svelte", html, re.I
+    ):
         return True
 
     # Check for minimal text with root div
-    root_divs = soup.find_all('div', id=re.compile(r'^(root|app|__next)$', re.I))
+    root_divs = soup.find_all("div", id=re.compile(r"^(root|app|__next)$", re.I))
     if root_divs and len(soup.get_text(strip=True)) < 500:
         return True
 
@@ -34,12 +35,11 @@ def detect_spa_or_dynamic(html: str, soup: BeautifulSoup) -> bool:
     text_ratio = len(text_content) / len(html) if len(html) > 0 else 0
 
     # Check for loading indicators
-    loading_indicators = bool(re.search(
-        r'loading|please wait|enabling javascript|javascript is required',
-        text_content[:1000], re.I
-    ))
+    loading_indicators = bool(
+        re.search(r"loading|please wait|enabling javascript|javascript is required", text_content[:1000], re.I)
+    )
 
-    script_tags = soup.find_all('script')
+    script_tags = soup.find_all("script")
     if len(script_tags) > 10 and text_ratio < 0.1:
         return True
 
@@ -56,31 +56,35 @@ def has_anomalies(html: str, soup: BeautifulSoup) -> bool:
 
     # Error pages
     error_patterns = [
-        r'404|not found', r'403|forbidden', r'500|internal server error',
-        r'502|bad gateway', r'503|service unavailable', r'error occurred'
+        r"404|not found",
+        r"403|forbidden",
+        r"500|internal server error",
+        r"502|bad gateway",
+        r"503|service unavailable",
+        r"error occurred",
     ]
     for pattern in error_patterns:
         if re.search(pattern, text_content):
             return True
 
     # Redirects
-    if re.search(r'redirect|redirecting|you will be redirected', text_content):
+    if re.search(r"redirect|redirecting|you will be redirected", text_content):
         return True
 
     # Login required
-    if re.search(r'login|sign in|authentication required|please log in', text_content[:500]):
+    if re.search(r"login|sign in|authentication required|please log in", text_content[:500]):
         return True
 
     # Captcha
-    if re.search(r'captcha|recaptcha|verify you are human|security check', text_content):
+    if re.search(r"captcha|recaptcha|verify you are human|security check", text_content):
         return True
 
     # Robots blocked
-    if re.search(r'robot|bot|crawler|automated access|rate limit', text_content[:1000]):
+    if re.search(r"robot|bot|crawler|automated access|rate limit", text_content[:1000]):
         return True
 
     # Malformed HTML
-    if not soup.find('html') or not soup.find('body'):
+    if not soup.find("html") or not soup.find("body"):  # noqa: SIM103
         return True
 
     return False
@@ -90,7 +94,7 @@ def score_content_quality(html: str, soup: BeautifulSoup) -> float:
     """Score content quality (0-100)."""
     score = 0.0
 
-    text_content = soup.get_text(separator=' ', strip=True)
+    text_content = soup.get_text(separator=" ", strip=True)
     words = text_content.split()
     word_count = len(words)
 
@@ -104,25 +108,25 @@ def score_content_quality(html: str, soup: BeautifulSoup) -> float:
 
     # Vocabulary richness
     if word_count > 0:
-        unique_words = len(set(w.lower() for w in words if len(w) > 3))
+        unique_words = len({w.lower() for w in words if len(w) > 3})
         vocab_richness = unique_words / word_count
         score += min(vocab_richness * 100, 20)
 
     # Semantic HTML elements
-    semantic_tags = ['article', 'section', 'nav', 'header', 'footer', 'main', 'aside']
+    semantic_tags = ["article", "section", "nav", "header", "footer", "main", "aside"]
     semantic_count = sum(len(soup.find_all(tag)) for tag in semantic_tags)
     score += min(semantic_count * 2, 15)
 
     # Headers
-    header_count = len(soup.find_all(re.compile(r'^h[1-6]$')))
+    header_count = len(soup.find_all(re.compile(r"^h[1-6]$")))
     score += min(header_count * 1.5, 10)
 
     # Paragraphs
-    p_count = len(soup.find_all('p'))
+    p_count = len(soup.find_all("p"))
     score += min(p_count * 0.5, 10)
 
     # Links
-    links = soup.find_all('a', href=True)
+    links = soup.find_all("a", href=True)
     link_count = len(links)
     if 5 <= link_count <= 50:
         score += 10
@@ -130,9 +134,9 @@ def score_content_quality(html: str, soup: BeautifulSoup) -> float:
         score += 5
 
     # Meta tags
-    meta_tags = soup.find_all('meta')
-    has_description = any(m.get('name') == 'description' for m in meta_tags)
-    has_viewport = any(m.get('name') == 'viewport' for m in meta_tags)
+    meta_tags = soup.find_all("meta")
+    has_description = any(m.get("name") == "description" for m in meta_tags)
+    has_viewport = any(m.get("name") == "viewport" for m in meta_tags)
     if has_description:
         score += 2.5
     if has_viewport:
@@ -141,15 +145,15 @@ def score_content_quality(html: str, soup: BeautifulSoup) -> float:
     return min(score, 100.0)
 
 
-def analyze_url(html_path: Path, manifest_entry: Dict) -> Dict:
+def analyze_url(html_path: Path, manifest_entry: dict) -> dict:
     """Analyze a single URL and return scoring metrics."""
     try:
-        with open(html_path, 'r', encoding='utf-8', errors='replace') as f:
+        with open(html_path, encoding="utf-8", errors="replace") as f:
             html = f.read()
-    except Exception as e:
+    except Exception:
         return None
 
-    soup = BeautifulSoup(html, 'html.parser')
+    soup = BeautifulSoup(html, "html.parser")
 
     is_dynamic = detect_spa_or_dynamic(html, soup)
     has_issues = has_anomalies(html, soup)
@@ -157,21 +161,21 @@ def analyze_url(html_path: Path, manifest_entry: Dict) -> Dict:
     quality_score = score_content_quality(html, soup)
 
     return {
-        'id': manifest_entry['id'],
-        'url': manifest_entry['url'],
-        'domain': manifest_entry['domain'],
-        'category': manifest_entry['category'],
-        'html_file': manifest_entry['html_file'],
-        'is_dynamic': is_dynamic,
-        'has_issues': has_issues,
-        'token_count': token_count,
-        'file_size': len(html),
-        'quality_score': quality_score,
-        'eligible': not is_dynamic and not has_issues and 4096 <= token_count <= 131072,
+        "id": manifest_entry["id"],
+        "url": manifest_entry["url"],
+        "domain": manifest_entry["domain"],
+        "category": manifest_entry["category"],
+        "html_file": manifest_entry["html_file"],
+        "is_dynamic": is_dynamic,
+        "has_issues": has_issues,
+        "token_count": token_count,
+        "file_size": len(html),
+        "quality_score": quality_score,
+        "eligible": not is_dynamic and not has_issues and 4096 <= token_count <= 131072,
     }
 
 
-def select_best_urls(manifest_path: Path, top_n: int = 50) -> List[Dict]:
+def select_best_urls(manifest_path: Path, top_n: int = 50) -> list[dict]:
     """Select the best N URLs based on quality criteria."""
     with open(manifest_path) as f:
         manifest = json.load(f)
@@ -180,36 +184,38 @@ def select_best_urls(manifest_path: Path, top_n: int = 50) -> List[Dict]:
 
     results = []
     for entry in manifest:
-        html_path = Path(entry['html_file'])
+        html_path = Path(entry["html_file"])
         result = analyze_url(html_path, entry)
         if result:
             results.append(result)
 
     print(f"Total analyzed: {len(results)}")
 
-    eligible = [r for r in results if r['eligible']]
+    eligible = [r for r in results if r["eligible"]]
     print(f"Eligible URLs (static, no issues, 4K-128K tokens): {len(eligible)}")
 
     # Deduplicate by URL (keep highest quality score for each URL)
     url_to_best = {}
     for r in eligible:
-        url = r['url']
-        if url not in url_to_best or r['quality_score'] > url_to_best[url]['quality_score']:
+        url = r["url"]
+        if url not in url_to_best or r["quality_score"] > url_to_best[url]["quality_score"]:
             url_to_best[url] = r
 
     eligible_deduped = list(url_to_best.values())
     print(f"After deduplication: {len(eligible_deduped)} unique URLs")
 
-    eligible_sorted = sorted(eligible_deduped, key=lambda x: x['quality_score'], reverse=True)
+    eligible_sorted = sorted(eligible_deduped, key=lambda x: x["quality_score"], reverse=True)
 
     selected = eligible_sorted[:top_n]
 
     print(f"\nSelected top {len(selected)} URLs")
     print(f"Quality score range: {selected[-1]['quality_score']:.1f} - {selected[0]['quality_score']:.1f}")
-    print(f"Token count range: {min(s['token_count'] for s in selected):,} - {max(s['token_count'] for s in selected):,}")
+    print(
+        f"Token count range: {min(s['token_count'] for s in selected):,} - {max(s['token_count'] for s in selected):,}"
+    )
 
-    category_dist = Counter(s['category'] for s in selected)
-    print(f"\nCategory distribution:")
+    category_dist = Counter(s["category"] for s in selected)
+    print("\nCategory distribution:")
     for cat, count in category_dist.items():
         print(f"  {cat}: {count}")
 
@@ -222,7 +228,7 @@ def main():
 
     selected_urls = select_best_urls(manifest_path, top_n=100)
     url_list_path = Path("data/selected_url_list.txt")
-    with open(url_list_path, 'w') as f:
+    with open(url_list_path, "w") as f:
         for item in selected_urls:
             f.write(f"{item['url']}\n")
 

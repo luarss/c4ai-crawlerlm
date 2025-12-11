@@ -38,23 +38,20 @@ LOGGING_STEPS = 10
 SAVE_STEPS = 100
 EVAL_STEPS = 100
 
+
 def format_chat_template(example, tokenizer):
     """
     Format the dataset examples using the chat template.
     Dataset already has 'messages' field with user/assistant roles.
     """
-    formatted = tokenizer.apply_chat_template(
-        example["messages"],
-        tokenize=False,
-        add_generation_prompt=False
-    )
+    formatted = tokenizer.apply_chat_template(example["messages"], tokenize=False, add_generation_prompt=False)
     return {"text": formatted}
 
 
 def main():
-    print("="*60)
+    print("=" * 60)
     print("CrawlerLM Fine-tuning Script")
-    print("="*60)
+    print("=" * 60)
     print(f"Model: {MODEL_NAME}")
     print(f"Dataset: {DATASET_NAME}")
     print(f"Output: {OUTPUT_DIR}")
@@ -64,7 +61,7 @@ def main():
     print(f"Effective batch size: {BATCH_SIZE * GRADIENT_ACCUMULATION_STEPS}")
     print(f"Learning rate: {LEARNING_RATE}")
     print(f"Epochs: {NUM_EPOCHS}")
-    print("="*60)
+    print("=" * 60)
 
     print("\n[1/6] Loading tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
@@ -80,15 +77,13 @@ def main():
 
     print("\n[3/6] Formatting dataset with chat template...")
     train_dataset = dataset["train"].map(
-        lambda x: format_chat_template(x, tokenizer),
-        remove_columns=dataset["train"].column_names
+        lambda x: format_chat_template(x, tokenizer), remove_columns=dataset["train"].column_names
     )
     eval_dataset = dataset["validation"].map(
-        lambda x: format_chat_template(x, tokenizer),
-        remove_columns=dataset["validation"].column_names
+        lambda x: format_chat_template(x, tokenizer), remove_columns=dataset["validation"].column_names
     )
 
-    print(f"  Example formatted text (first 500 chars):")
+    print("  Example formatted text (first 500 chars):")
     print(f"  {train_dataset[0]['text'][:500]}...")
 
     print("\n[4/6] Loading model...")
@@ -102,10 +97,7 @@ def main():
     model.gradient_checkpointing_enable()
 
     response_template = "<|im_start|>assistant"
-    collator = DataCollatorForCompletionOnlyLM(
-        response_template=response_template,
-        tokenizer=tokenizer
-    )
+    collator = DataCollatorForCompletionOnlyLM(response_template=response_template, tokenizer=tokenizer)
 
     print("\n[5/6] Setting up training arguments...")
     training_args = TrainingArguments(
@@ -144,15 +136,15 @@ def main():
         dataset_text_field="text",
     )
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Starting training...")
-    print("="*60 + "\n")
+    print("=" * 60 + "\n")
 
     trainer.train()
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Training complete! Saving final model...")
-    print("="*60)
+    print("=" * 60)
 
     trainer.save_model(OUTPUT_DIR)
     tokenizer.save_pretrained(OUTPUT_DIR)
@@ -163,6 +155,7 @@ def main():
     print("\n✓ Fine-tuning complete!")
     print(f"  Model saved to: {OUTPUT_DIR}")
     print(f"  Hub model: {HF_HUB_MODEL_ID}")
+
 
 if __name__ == "__main__":
     main()
