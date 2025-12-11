@@ -9,8 +9,6 @@
 #     "peft>=0.10.0",
 #     "accelerate>=0.28.0",
 #     "bitsandbytes>=0.43.0",
-#     "rouge-score>=0.1.2",
-#     "python-Levenshtein>=0.25.0",
 # ]
 # ///
 """
@@ -20,13 +18,10 @@ This script uses HuggingFace TRL for supervised fine-tuning with LoRA adapters.
 Designed to run on HuggingFace Jobs infrastructure with T4 GPU.
 """
 
-from datasets import load_dataset
-from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments
-from trl import SFTTrainer, DataCollatorForCompletionOnlyLM
 import torch
-from rouge_score import rouge_scorer
-import Levenshtein
-from tqdm import tqdm
+from datasets import load_dataset
+from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
+from trl import DataCollatorForCompletionOnlyLM, SFTTrainer
 
 MODEL_NAME = "Qwen/Qwen3-0.6B"
 DATASET_NAME = "espsluar/crawlerlm-html-to-json"
@@ -55,63 +50,6 @@ def format_chat_template(example, tokenizer):
     )
     return {"text": formatted}
 
-def evaluate_model(model, tokenizer, test_dataset, device="cuda"):
-    """Evaluate the model on test set using ROUGE and Levenshtein metrics."""
-    print("\n" + "="*60)
-    print("Evaluating on test set...")
-    print("="*60)
-
-    model.eval()
-    scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
-
-    rouge1_scores = []
-    rouge2_scores = []
-    rougeL_scores = []
-    levenshtein_distances = []
-
-    for example in tqdm(test_dataset, desc="Evaluating"):
-        messages = example["messages"]
-        user_message = [msg for msg in messages if msg["role"] == "user"][0]["content"]
-        expected_output = [msg for msg in messages if msg["role"] == "assistant"][0]["content"]
-
-        input_messages = [{"role": "user", "content": user_message}]
-        input_text = tokenizer.apply_chat_template(
-            input_messages,
-            tokenize=False,
-            add_generation_prompt=True
-        )
-
-        inputs = tokenizer(input_text, return_tensors="pt", truncation=True, max_length=MAX_SEQ_LENGTH).to(device)
-
-        with torch.no_grad():
-            outputs = model.generate(
-                **inputs,
-                max_new_tokens=2048,
-                do_sample=False,
-                temperature=None,
-                top_p=None,
-            )
-
-        generated_ids = outputs[0][inputs.input_ids.shape[1]:]
-        predicted_output = tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
-
-        rouge_scores = scorer.score(expected_output, predicted_output)
-        rouge1_scores.append(rouge_scores['rouge1'].fmeasure)
-        rouge2_scores.append(rouge_scores['rouge2'].fmeasure)
-        rougeL_scores.append(rouge_scores['rougeL'].fmeasure)
-
-        lev_distance = Levenshtein.distance(expected_output, predicted_output)
-        levenshtein_distances.append(lev_distance)
-
-    results = {
-        "rouge1": sum(rouge1_scores) / len(rouge1_scores),
-        "rouge2": sum(rouge2_scores) / len(rouge2_scores),
-        "rougeL": sum(rougeL_scores) / len(rougeL_scores),
-        "levenshtein_avg": sum(levenshtein_distances) / len(levenshtein_distances),
-        "num_examples": len(test_dataset),
-    }
-
-    return results
 
 def main():
     print("="*60)

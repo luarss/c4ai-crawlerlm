@@ -18,7 +18,7 @@ Evaluation script using Transformers library with GPU acceleration.
 Compares base Qwen3-0.6B vs fine-tuned crawlerlm model.
 
 Usage:
-    uv run scripts/09_evaluate_transformers.py
+    uv run scripts/07_evaluate.py
 """
 
 import json
