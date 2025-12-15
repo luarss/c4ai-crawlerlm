@@ -11,7 +11,6 @@ from .schemas import (
     ProductSchema,
     RatingSchema,
     RecipeSchema,
-    ReviewSchema,
     get_schema,
 )
 
@@ -28,6 +27,5 @@ __all__ = [
     "ProductSchema",
     "RatingSchema",
     "RecipeSchema",
-    "ReviewSchema",
     "get_schema",
 ]

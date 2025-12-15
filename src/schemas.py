@@ -35,26 +35,6 @@ class ProductSchema(BaseModel):
     ]
 
 
-class ReviewSchema(BaseModel):
-    type: Literal["review"]
-    reviewer_name: str
-    reviewer_verified: bool | None = None
-    rating: float = Field(ge=0, le=5)
-    title: str | None = None
-    date: str
-    body: str
-    helpful_count: int | None = Field(None, ge=0)
-
-    VALIDATION_PATTERNS: ClassVar[list[str]] = [
-        r"\d+(\.\d+)?\s*star",  # star rating
-        r"rating:\s*\d+(\.\d+)?",  # rating score
-        r"★+",  # star symbols
-        r"\d{1,2}/\d{1,2}/\d{4}",  # date mm/dd/yyyy
-        r"\d{4}-\d{2}-\d{2}",  # date yyyy-mm-dd
-        r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4}",  # date Mon DD, YYYY
-    ]
-
-
 class RecipeSchema(BaseModel):
     type: Literal["recipe"]
     name: str
@@ -152,7 +132,6 @@ class EmptySPAShellSchema(BaseModel):
 
 SCHEMA_REGISTRY = {
     "product": ProductSchema,
-    "review": ReviewSchema,
     "recipe": RecipeSchema,
     "event": EventSchema,
     "pricing_table": PricingTableSchema,

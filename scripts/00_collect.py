@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import hashlib
 import json
@@ -5,9 +6,9 @@ import re
 from pathlib import Path
 
 from bs4 import BeautifulSoup
-from crawl4ai import AsyncWebCrawler, AsyncUrlSeeder, SeedingConfig
+from crawl4ai import AsyncUrlSeeder, AsyncWebCrawler, SeedingConfig
 
-from src.schemas import ProductSchema, RecipeSchema, ReviewSchema
+from src.schemas import ProductSchema, RecipeSchema
 
 
 class FragmentCollector:
@@ -41,6 +42,48 @@ class FragmentCollector:
                     "domain": "seriouseats.com",
                     "pattern": "*recipe*",
                     "max_urls": 25,
+                },
+            ],
+            "product": [
+                {
+                    "domain": "wirecutter.com",
+                    "pattern": "*/reviews/*",
+                    "max_urls": 30,
+                },
+                {
+                    "domain": "thespruce.com",
+                    "pattern": "*/best-*",
+                    "max_urls": 30,
+                },
+                {
+                    "domain": "pcmag.com",
+                    "pattern": "*/reviews/*",
+                    "max_urls": 30,
+                },
+                {
+                    "domain": "techradar.com",
+                    "pattern": "*/reviews/*",
+                    "max_urls": 30,
+                },
+                {
+                    "domain": "tomsguide.com",
+                    "pattern": "*/reviews/*",
+                    "max_urls": 30,
+                },
+                {
+                    "domain": "cnet.com",
+                    "pattern": "*/products/*",
+                    "max_urls": 30,
+                },
+                {
+                    "domain": "engadget.com",
+                    "pattern": "*/*",
+                    "max_urls": 30,
+                },
+                {
+                    "domain": "theverge.com",
+                    "pattern": "*/*",
+                    "max_urls": 30,
                 },
             ],
         }
@@ -77,14 +120,21 @@ class FragmentCollector:
                 print(f"   Max URLs: {max_urls}")
 
                 try:
-                    # Configure sitemap-based URL discovery
+                    # Type-specific queries for relevance scoring
+                    queries = {
+                        "recipe": "recipe ingredients instructions cooking steps directions",
+                        "product": "product price buy purchase specifications details",
+                    }
+                    query = queries.get(fragment_type, "")
+
+                    # Configure sitemap+cc URL discovery (combines sitemap + Common Crawl)
                     seeding_config = SeedingConfig(
-                        source="sitemap",
+                        source="sitemap+cc",  # Use both sitemap and Common Crawl
                         pattern=pattern,
                         extract_head=True,  # Get metadata for scoring
-                        query="recipe ingredients instructions cooking steps",
+                        query=query,
                         scoring_method="bm25",
-                        score_threshold=0.2,  # Lower threshold to be inclusive
+                        score_threshold=0.1,  # Very low threshold for maximum discovery
                         max_urls=max_urls,
                         live_check=False,  # Skip live check for speed
                         concurrency=5,
@@ -136,8 +186,6 @@ class FragmentCollector:
             return self._validate_recipe(soup, text)
         elif fragment_type == "product":
             return self._validate_product(soup, text)
-        elif fragment_type == "review":
-            return self._validate_review(soup, text)
         else:
             return {
                 "is_valid": True,
@@ -165,7 +213,9 @@ class FragmentCollector:
 
         # Check for ingredients list (required) - look for measurement patterns from schema
         list_items = soup.find_all("li")
-        ingredient_patterns = [p for p in validation_patterns if any(x in p for x in ["cup", "tablespoon", "gram", "/"])]
+        ingredient_patterns = [
+            p for p in validation_patterns if any(x in p for x in ["cup", "tablespoon", "gram", "/"])
+        ]
 
         potential_ingredients = []
         for li in list_items:
@@ -284,69 +334,6 @@ class FragmentCollector:
             "reason": reason,
         }
 
-    def _validate_review(self, soup: BeautifulSoup, text: str) -> dict:
-        """Validate review fragment has reviewer name, rating, body, etc using schema patterns."""
-        found_fields = []
-        missing_fields = []
-        score = 0.0
-
-        # Use patterns from ReviewSchema
-        validation_patterns = ReviewSchema.VALIDATION_PATTERNS
-
-        # Check for reviewer name (required)
-        name_patterns = [
-            r"by\s+[A-Z][a-z]+",
-            r"reviewer:\s*[A-Z][a-z]+",
-            r"posted by\s+[A-Z][a-z]+",
-        ]
-        if any(re.search(pattern, text) for pattern in name_patterns):
-            found_fields.append("reviewer_name")
-            score += 0.2
-        else:
-            missing_fields.append("reviewer_name")
-
-        # Check for rating (required) - use schema patterns
-        rating_patterns = [p for p in validation_patterns if "star" in p or "rating" in p]
-        if any(re.search(pattern, text, re.IGNORECASE) for pattern in rating_patterns):
-            found_fields.append("rating")
-            score += 0.3
-        else:
-            missing_fields.append("rating")
-
-        # Check for review body (required) - substantial text
-        paragraphs = soup.find_all("p")
-        long_paragraphs = [p for p in paragraphs if len(p.get_text(strip=True)) > 50]
-        if long_paragraphs:
-            found_fields.append("body")
-            score += 0.3
-        else:
-            missing_fields.append("body")
-
-        # Check for date (required) - use schema patterns
-        date_patterns = [p for p in validation_patterns if any(x in p for x in [r"\d{", "Jan", "Feb", "Mar"])]
-        if any(re.search(pattern, text) for pattern in date_patterns):
-            found_fields.append("date")
-            score += 0.2
-        else:
-            missing_fields.append("date")
-
-        # Threshold: need at least rating + body
-        is_valid = "rating" in found_fields and "body" in found_fields
-
-        reason = (
-            f"Found {len(found_fields)} fields: {', '.join(found_fields)}"
-            if is_valid
-            else f"Missing required fields: {', '.join(missing_fields)}"
-        )
-
-        return {
-            "is_valid": is_valid,
-            "score": min(score, 1.0),
-            "found_fields": found_fields,
-            "missing_fields": missing_fields,
-            "reason": reason,
-        }
-
     async def fetch_page(self, url: str) -> str | None:
         """Fetch HTML from URL using Crawl4AI."""
         try:
@@ -374,16 +361,6 @@ class FragmentCollector:
                 soup.find("main")
                 or soup.find("article")
                 or soup.find("div", class_=lambda x: x and "product" in x.lower())
-            )
-            if candidates:
-                return str(candidates)
-
-        elif fragment_type == "review":
-            # Try to find review sections
-            candidates = (
-                soup.find("section", class_=lambda x: x and "review" in x.lower())
-                or soup.find("div", class_=lambda x: x and "review" in x.lower())
-                or soup.find("main")
             )
             if candidates:
                 return str(candidates)
@@ -450,17 +427,6 @@ class FragmentCollector:
                 "availability": "in_stock",
                 "image_url": "TODO: Extract image URL (or null)",
             }
-        elif fragment_type == "review":
-            template = {
-                "type": "review",
-                "reviewer_name": "TODO: Extract reviewer name",
-                "reviewer_verified": None,
-                "rating": 0.0,
-                "title": "TODO: Extract review title (or null)",
-                "date": "TODO: Extract date",
-                "body": "TODO: Extract review body",
-                "helpful_count": None,
-            }
         elif fragment_type == "recipe":
             template = {
                 "type": "recipe",
@@ -481,10 +447,25 @@ class FragmentCollector:
         template_path.write_text(json.dumps(template, indent=2))
         print(f"  Annotation template: {template_path.name}")
 
-    async def collect_fragments(self):
-        """Collect fragments using sitemap-based URL discovery."""
+    async def collect_fragments(self, categories: list[str] | None = None):
+        """Collect fragments using sitemap-based URL discovery.
+
+        Args:
+            categories: List of categories to collect (e.g., ['recipe', 'product']).
+                       If None, collects all categories.
+        """
+        # Filter categories
+        if categories:
+            fragment_types = [t for t in categories if t in self.domain_configs]
+            if not fragment_types:
+                print(f"❌ No valid categories specified. Available: {list(self.domain_configs.keys())}")
+                return
+        else:
+            fragment_types = list(self.domain_configs.keys())
+
         print("\n" + "=" * 70)
         print("🚀 COLLECTING FRAGMENTS USING CRAWL4AI URL SEEDING")
+        print(f"📦 Categories: {', '.join(fragment_types)}")
         print("=" * 70)
 
         total_collected = 0
@@ -492,7 +473,7 @@ class FragmentCollector:
         total_discovered = 0
         validation_stats = {"valid": 0, "invalid": 0, "total_score": 0.0}
 
-        for fragment_type in self.domain_configs.keys():
+        for fragment_type in fragment_types:
             print(f"\n📦 Processing {fragment_type.upper()} fragments...")
             print("=" * 70)
 
@@ -565,10 +546,39 @@ class FragmentCollector:
 
 async def main():
     """Main entry point."""
+    parser = argparse.ArgumentParser(
+        description="Collect HTML fragments using Crawl4AI URL seeding",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Collect all categories
+  python scripts/00_collect.py
+
+  # Collect only recipes
+  python scripts/00_collect.py --categories recipe
+
+  # Collect only products
+  python scripts/00_collect.py --categories product
+
+  # Run in parallel (separate terminals)
+  python scripts/00_collect.py --categories recipe &
+  python scripts/00_collect.py --categories product &
+        """,
+    )
+    parser.add_argument(
+        "--categories",
+        "-c",
+        nargs="+",
+        choices=["recipe", "product"],
+        help="Categories to collect (default: all)",
+    )
+
+    args = parser.parse_args()
+
     project_root = Path(__file__).parent.parent
     collector = FragmentCollector(project_root)
 
-    await collector.collect_fragments()
+    await collector.collect_fragments(categories=args.categories)
 
 
 if __name__ == "__main__":
