@@ -1,10 +1,3 @@
-#!/usr/bin/env python3
-"""
-Interactive Streamlit app for labeling HTML fragment annotations.
-
-Run with: streamlit run scripts/label_app.py
-"""
-
 import json
 from pathlib import Path
 
@@ -98,35 +91,35 @@ class AnnotationLabeler:
             pretty_html = soup.prettify()
             st.code(pretty_html, language="html", line_numbers=True)
 
-    def _render_recipe_form(self, data):
+    def _render_recipe_form(self, data, fragment_id):
         """Render form for recipe schema."""
         st.subheader("Recipe Annotation")
 
-        name = st.text_input("Recipe Name*", value=data.get("name", ""))
-        description = st.text_area("Description", value=data.get("description") or "")
-        author = st.text_input("Author", value=data.get("author") or "")
+        name = st.text_input("Recipe Name*", value=data.get("name", ""), key=f"{fragment_id}_name")
+        description = st.text_area("Description", value=data.get("description") or "", key=f"{fragment_id}_description")
+        author = st.text_input("Author", value=data.get("author") or "", key=f"{fragment_id}_author")
 
         col1, col2, col3 = st.columns(3)
         with col1:
-            prep_time = st.text_input("Prep Time (e.g., '15 min')", value=data.get("prep_time") or "")
+            prep_time = st.text_input("Prep Time (e.g., '15 min')", value=data.get("prep_time") or "", key=f"{fragment_id}_prep_time")
         with col2:
-            cook_time = st.text_input("Cook Time", value=data.get("cook_time") or "")
+            cook_time = st.text_input("Cook Time", value=data.get("cook_time") or "", key=f"{fragment_id}_cook_time")
         with col3:
-            total_time = st.text_input("Total Time", value=data.get("total_time") or "")
+            total_time = st.text_input("Total Time", value=data.get("total_time") or "", key=f"{fragment_id}_total_time")
 
-        servings = st.text_input("Servings (e.g., '4 servings')", value=data.get("servings") or "")
+        servings = st.text_input("Servings (e.g., '4 servings')", value=data.get("servings") or "", key=f"{fragment_id}_servings")
 
         # Ingredients
         st.markdown("**Ingredients***")
         ingredients = data.get("ingredients", [])
         ingredient_count = st.number_input(
-            "Number of ingredients", min_value=1, value=max(len(ingredients), 1), step=1
+            "Number of ingredients", min_value=1, value=max(len(ingredients), 1), step=1, key=f"{fragment_id}_ingredient_count"
         )
 
         new_ingredients = []
         for i in range(ingredient_count):
             default_val = ingredients[i] if i < len(ingredients) else ""
-            ingredient = st.text_input(f"Ingredient {i+1}", value=default_val, key=f"ingredient_{i}")
+            ingredient = st.text_input(f"Ingredient {i+1}", value=default_val, key=f"{fragment_id}_ingredient_{i}")
             if ingredient:
                 new_ingredients.append(ingredient)
 
@@ -134,14 +127,14 @@ class AnnotationLabeler:
         st.markdown("**Instructions***")
         instructions = data.get("instructions", [])
         instruction_count = st.number_input(
-            "Number of steps", min_value=1, value=max(len(instructions), 1), step=1
+            "Number of steps", min_value=1, value=max(len(instructions), 1), step=1, key=f"{fragment_id}_instruction_count"
         )
 
         new_instructions = []
         for i in range(instruction_count):
             default_val = instructions[i] if i < len(instructions) else ""
             instruction = st.text_area(
-                f"Step {i+1}", value=default_val, key=f"instruction_{i}", height=80
+                f"Step {i+1}", value=default_val, key=f"{fragment_id}_instruction_{i}", height=80
             )
             if instruction:
                 new_instructions.append(instruction)
@@ -149,20 +142,35 @@ class AnnotationLabeler:
         # Rating (optional)
         st.markdown("**Rating (optional)**")
         col1, col2 = st.columns(2)
+
+        # Handle different rating formats (dict, int, or None)
+        rating_data = data.get("rating")
+        if isinstance(rating_data, dict):
+            default_score = rating_data.get("score", 0.0)
+            default_count = rating_data.get("review_count", 0)
+        elif isinstance(rating_data, (int, float)):
+            default_score = float(rating_data)
+            default_count = 0
+        else:
+            default_score = 0.0
+            default_count = 0
+
         with col1:
             rating_score = st.number_input(
                 "Rating Score (0-5)",
                 min_value=0.0,
                 max_value=5.0,
-                value=data.get("rating", {}).get("score", 0.0),
+                value=default_score,
                 step=0.1,
+                key=f"{fragment_id}_rating_score"
             )
         with col2:
             review_count = st.number_input(
                 "Review Count",
                 min_value=0,
-                value=data.get("rating", {}).get("review_count", 0),
+                value=default_count,
                 step=1,
+                key=f"{fragment_id}_review_count"
             )
 
         return {
@@ -181,13 +189,13 @@ class AnnotationLabeler:
             else None,
         }
 
-    def _render_product_form(self, data):
+    def _render_product_form(self, data, fragment_id):
         """Render form for product schema."""
         st.subheader("Product Annotation")
 
-        name = st.text_input("Product Name*", value=data.get("name", ""))
-        brand = st.text_input("Brand", value=data.get("brand") or "")
-        description = st.text_area("Description", value=data.get("description") or "")
+        name = st.text_input("Product Name*", value=data.get("name", ""), key=f"{fragment_id}_name")
+        brand = st.text_input("Brand", value=data.get("brand") or "", key=f"{fragment_id}_brand")
+        description = st.text_area("Description", value=data.get("description") or "", key=f"{fragment_id}_description")
 
         # Price
         st.markdown("**Price***")
@@ -198,40 +206,57 @@ class AnnotationLabeler:
                 min_value=0.0,
                 value=data.get("price", {}).get("current", 0.0),
                 step=0.01,
+                key=f"{fragment_id}_current_price"
             )
         with col2:
             original_price = st.number_input(
-                "Original Price (optional)", min_value=0.0, value=0.0, step=0.01
+                "Original Price (optional)", min_value=0.0, value=0.0, step=0.01, key=f"{fragment_id}_original_price"
             )
         with col3:
-            currency = st.text_input("Currency", value=data.get("price", {}).get("currency", "USD"))
+            currency = st.text_input("Currency", value=data.get("price", {}).get("currency", "USD"), key=f"{fragment_id}_currency")
 
         # Rating
         st.markdown("**Rating (optional)**")
         col1, col2 = st.columns(2)
+
+        # Handle different rating formats (dict, int, or None)
+        rating_data = data.get("rating")
+        if isinstance(rating_data, dict):
+            default_score = rating_data.get("score", 0.0)
+            default_count = rating_data.get("review_count", 0)
+        elif isinstance(rating_data, (int, float)):
+            default_score = float(rating_data)
+            default_count = 0
+        else:
+            default_score = 0.0
+            default_count = 0
+
         with col1:
             rating_score = st.number_input(
                 "Rating Score (0-5)",
                 min_value=0.0,
                 max_value=5.0,
-                value=data.get("rating", {}).get("score", 0.0) if data.get("rating") else 0.0,
+                value=default_score,
                 step=0.1,
+                key=f"{fragment_id}_rating_score"
             )
         with col2:
             review_count = st.number_input(
                 "Review Count",
                 min_value=0,
-                value=data.get("rating", {}).get("review_count", 0) if data.get("rating") else 0,
+                value=default_count,
                 step=1,
+                key=f"{fragment_id}_review_count"
             )
 
         availability = st.selectbox(
             "Availability",
             ["in_stock", "out_of_stock", "pre_order", "limited"],
             index=0 if not data.get("availability") else ["in_stock", "out_of_stock", "pre_order", "limited"].index(data.get("availability")),
+            key=f"{fragment_id}_availability"
         )
 
-        image_url = st.text_input("Image URL", value=data.get("image_url") or "")
+        image_url = st.text_input("Image URL", value=data.get("image_url") or "", key=f"{fragment_id}_image_url")
 
         return {
             "type": "product",
@@ -250,25 +275,25 @@ class AnnotationLabeler:
             "image_url": image_url if image_url else None,
         }
 
-    def _render_review_form(self, data):
+    def _render_review_form(self, data, fragment_id):
         """Render form for review schema."""
         st.subheader("Review Annotation")
 
-        reviewer_name = st.text_input("Reviewer Name*", value=data.get("reviewer_name", ""))
+        reviewer_name = st.text_input("Reviewer Name*", value=data.get("reviewer_name", ""), key=f"{fragment_id}_reviewer_name")
         reviewer_verified = st.checkbox(
-            "Verified Reviewer", value=data.get("reviewer_verified") or False
+            "Verified Reviewer", value=data.get("reviewer_verified") or False, key=f"{fragment_id}_reviewer_verified"
         )
 
         rating = st.slider(
-            "Rating*", min_value=0.0, max_value=5.0, value=data.get("rating", 0.0), step=0.5
+            "Rating*", min_value=0.0, max_value=5.0, value=data.get("rating", 0.0), step=0.5, key=f"{fragment_id}_rating"
         )
 
-        title = st.text_input("Review Title", value=data.get("title") or "")
-        date = st.text_input("Date*", value=data.get("date", ""))
-        body = st.text_area("Review Body*", value=data.get("body", ""), height=200)
+        title = st.text_input("Review Title", value=data.get("title") or "", key=f"{fragment_id}_title")
+        date = st.text_input("Date*", value=data.get("date", ""), key=f"{fragment_id}_date")
+        body = st.text_area("Review Body*", value=data.get("body", ""), height=200, key=f"{fragment_id}_body")
 
         helpful_count = st.number_input(
-            "Helpful Count", min_value=0, value=data.get("helpful_count") or 0, step=1
+            "Helpful Count", min_value=0, value=data.get("helpful_count") or 0, step=1, key=f"{fragment_id}_helpful_count"
         )
 
         return {
@@ -405,12 +430,13 @@ class AnnotationLabeler:
 
             # Render appropriate form based on type
             fragment_type = annotation_data.get("type")
+            fragment_id = current_file["fragment_id"]
             if fragment_type == "recipe":
-                updated_annotation = self._render_recipe_form(annotation_data)
+                updated_annotation = self._render_recipe_form(annotation_data, fragment_id)
             elif fragment_type == "product":
-                updated_annotation = self._render_product_form(annotation_data)
+                updated_annotation = self._render_product_form(annotation_data, fragment_id)
             elif fragment_type == "review":
-                updated_annotation = self._render_review_form(annotation_data)
+                updated_annotation = self._render_review_form(annotation_data, fragment_id)
             else:
                 st.error(f"Unsupported fragment type: {fragment_type}")
                 st.json(annotation_data)
