@@ -5,7 +5,7 @@ import streamlit as st
 from bs4 import BeautifulSoup
 from pydantic import ValidationError
 
-from src.schemas import SCHEMA_REGISTRY, RecipeSchema, ProductSchema, ReviewSchema
+from src.schemas import SCHEMA_REGISTRY
 
 
 class AnnotationLabeler:
@@ -101,25 +101,35 @@ class AnnotationLabeler:
 
         col1, col2, col3 = st.columns(3)
         with col1:
-            prep_time = st.text_input("Prep Time (e.g., '15 min')", value=data.get("prep_time") or "", key=f"{fragment_id}_prep_time")
+            prep_time = st.text_input(
+                "Prep Time (e.g., '15 min')", value=data.get("prep_time") or "", key=f"{fragment_id}_prep_time"
+            )
         with col2:
             cook_time = st.text_input("Cook Time", value=data.get("cook_time") or "", key=f"{fragment_id}_cook_time")
         with col3:
-            total_time = st.text_input("Total Time", value=data.get("total_time") or "", key=f"{fragment_id}_total_time")
+            total_time = st.text_input(
+                "Total Time", value=data.get("total_time") or "", key=f"{fragment_id}_total_time"
+            )
 
-        servings = st.text_input("Servings (e.g., '4 servings')", value=data.get("servings") or "", key=f"{fragment_id}_servings")
+        servings = st.text_input(
+            "Servings (e.g., '4 servings')", value=data.get("servings") or "", key=f"{fragment_id}_servings"
+        )
 
         # Ingredients
         st.markdown("**Ingredients***")
         ingredients = data.get("ingredients", [])
         ingredient_count = st.number_input(
-            "Number of ingredients", min_value=1, value=max(len(ingredients), 1), step=1, key=f"{fragment_id}_ingredient_count"
+            "Number of ingredients",
+            min_value=1,
+            value=max(len(ingredients), 1),
+            step=1,
+            key=f"{fragment_id}_ingredient_count",
         )
 
         new_ingredients = []
         for i in range(ingredient_count):
             default_val = ingredients[i] if i < len(ingredients) else ""
-            ingredient = st.text_input(f"Ingredient {i+1}", value=default_val, key=f"{fragment_id}_ingredient_{i}")
+            ingredient = st.text_input(f"Ingredient {i + 1}", value=default_val, key=f"{fragment_id}_ingredient_{i}")
             if ingredient:
                 new_ingredients.append(ingredient)
 
@@ -127,14 +137,18 @@ class AnnotationLabeler:
         st.markdown("**Instructions***")
         instructions = data.get("instructions", [])
         instruction_count = st.number_input(
-            "Number of steps", min_value=1, value=max(len(instructions), 1), step=1, key=f"{fragment_id}_instruction_count"
+            "Number of steps",
+            min_value=1,
+            value=max(len(instructions), 1),
+            step=1,
+            key=f"{fragment_id}_instruction_count",
         )
 
         new_instructions = []
         for i in range(instruction_count):
             default_val = instructions[i] if i < len(instructions) else ""
             instruction = st.text_area(
-                f"Step {i+1}", value=default_val, key=f"{fragment_id}_instruction_{i}", height=80
+                f"Step {i + 1}", value=default_val, key=f"{fragment_id}_instruction_{i}", height=80
             )
             if instruction:
                 new_instructions.append(instruction)
@@ -162,15 +176,11 @@ class AnnotationLabeler:
                 max_value=5.0,
                 value=default_score,
                 step=0.1,
-                key=f"{fragment_id}_rating_score"
+                key=f"{fragment_id}_rating_score",
             )
         with col2:
             review_count = st.number_input(
-                "Review Count",
-                min_value=0,
-                value=default_count,
-                step=1,
-                key=f"{fragment_id}_review_count"
+                "Review Count", min_value=0, value=default_count, step=1, key=f"{fragment_id}_review_count"
             )
 
         return {
@@ -206,14 +216,16 @@ class AnnotationLabeler:
                 min_value=0.0,
                 value=data.get("price", {}).get("current", 0.0),
                 step=0.01,
-                key=f"{fragment_id}_current_price"
+                key=f"{fragment_id}_current_price",
             )
         with col2:
             original_price = st.number_input(
                 "Original Price (optional)", min_value=0.0, value=0.0, step=0.01, key=f"{fragment_id}_original_price"
             )
         with col3:
-            currency = st.text_input("Currency", value=data.get("price", {}).get("currency", "USD"), key=f"{fragment_id}_currency")
+            currency = st.text_input(
+                "Currency", value=data.get("price", {}).get("currency", "USD"), key=f"{fragment_id}_currency"
+            )
 
         # Rating
         st.markdown("**Rating (optional)**")
@@ -238,22 +250,20 @@ class AnnotationLabeler:
                 max_value=5.0,
                 value=default_score,
                 step=0.1,
-                key=f"{fragment_id}_rating_score"
+                key=f"{fragment_id}_rating_score",
             )
         with col2:
             review_count = st.number_input(
-                "Review Count",
-                min_value=0,
-                value=default_count,
-                step=1,
-                key=f"{fragment_id}_review_count"
+                "Review Count", min_value=0, value=default_count, step=1, key=f"{fragment_id}_review_count"
             )
 
         availability = st.selectbox(
             "Availability",
             ["in_stock", "out_of_stock", "pre_order", "limited"],
-            index=0 if not data.get("availability") else ["in_stock", "out_of_stock", "pre_order", "limited"].index(data.get("availability")),
-            key=f"{fragment_id}_availability"
+            index=0
+            if not data.get("availability")
+            else ["in_stock", "out_of_stock", "pre_order", "limited"].index(data.get("availability")),
+            key=f"{fragment_id}_availability",
         )
 
         image_url = st.text_input("Image URL", value=data.get("image_url") or "", key=f"{fragment_id}_image_url")
@@ -279,13 +289,20 @@ class AnnotationLabeler:
         """Render form for review schema."""
         st.subheader("Review Annotation")
 
-        reviewer_name = st.text_input("Reviewer Name*", value=data.get("reviewer_name", ""), key=f"{fragment_id}_reviewer_name")
+        reviewer_name = st.text_input(
+            "Reviewer Name*", value=data.get("reviewer_name", ""), key=f"{fragment_id}_reviewer_name"
+        )
         reviewer_verified = st.checkbox(
             "Verified Reviewer", value=data.get("reviewer_verified") or False, key=f"{fragment_id}_reviewer_verified"
         )
 
         rating = st.slider(
-            "Rating*", min_value=0.0, max_value=5.0, value=data.get("rating", 0.0), step=0.5, key=f"{fragment_id}_rating"
+            "Rating*",
+            min_value=0.0,
+            max_value=5.0,
+            value=data.get("rating", 0.0),
+            step=0.5,
+            key=f"{fragment_id}_rating",
         )
 
         title = st.text_input("Review Title", value=data.get("title") or "", key=f"{fragment_id}_title")
@@ -293,7 +310,11 @@ class AnnotationLabeler:
         body = st.text_area("Review Body*", value=data.get("body", ""), height=200, key=f"{fragment_id}_body")
 
         helpful_count = st.number_input(
-            "Helpful Count", min_value=0, value=data.get("helpful_count") or 0, step=1, key=f"{fragment_id}_helpful_count"
+            "Helpful Count",
+            min_value=0,
+            value=data.get("helpful_count") or 0,
+            step=1,
+            key=f"{fragment_id}_helpful_count",
         )
 
         return {
@@ -358,14 +379,10 @@ class AnnotationLabeler:
                 st.session_state.current_idx = max(0, st.session_state.current_idx - 1)
                 st.rerun()
 
-            st.markdown(
-                f"**{st.session_state.current_idx + 1}** / {len(st.session_state.files)}"
-            )
+            st.markdown(f"**{st.session_state.current_idx + 1}** / {len(st.session_state.files)}")
 
             if st.button("⏩ Next"):
-                st.session_state.current_idx = min(
-                    len(st.session_state.files) - 1, st.session_state.current_idx + 1
-                )
+                st.session_state.current_idx = min(len(st.session_state.files) - 1, st.session_state.current_idx + 1)
                 st.rerun()
 
             if st.button("⏭️ Last"):
@@ -380,7 +397,7 @@ class AnnotationLabeler:
                 "Select annotation",
                 range(len(st.session_state.files)),
                 index=st.session_state.current_idx,
-                format_func=lambda i: f"{i+1}. {st.session_state.files[i]['fragment_id']}",
+                format_func=lambda i: f"{i + 1}. {st.session_state.files[i]['fragment_id']}",
             )
             if selected_idx != st.session_state.current_idx:
                 st.session_state.current_idx = selected_idx
