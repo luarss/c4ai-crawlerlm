@@ -8,7 +8,10 @@ from pathlib import Path
 from bs4 import BeautifulSoup
 from crawl4ai import AsyncUrlSeeder, AsyncWebCrawler, SeedingConfig
 
-from src.schemas import ProductSchema, RecipeSchema
+from src.schemas import (
+    ProductSchema,
+    RecipeSchema,
+)
 
 
 class FragmentCollector:
@@ -86,6 +89,99 @@ class FragmentCollector:
                     "max_urls": 30,
                 },
             ],
+            "event": [
+                {
+                    "domain": "meetup.com",
+                    "pattern": "*/events/*",
+                    "max_urls": 25,
+                },
+                {
+                    "domain": "eventbrite.com",
+                    "pattern": "*/e/*",
+                    "max_urls": 25,
+                },
+                {
+                    "domain": "events.cornell.edu",
+                    "pattern": "*/event/*",
+                    "max_urls": 20,
+                },
+                {
+                    "domain": "lu.ma",
+                    "pattern": "*/*",
+                    "max_urls": 20,
+                },
+            ],
+            "pricing_table": [
+                {
+                    "domain": "stripe.com",
+                    "pattern": "*/pricing*",
+                    "max_urls": 15,
+                },
+                {
+                    "domain": "notion.so",
+                    "pattern": "*/pricing*",
+                    "max_urls": 15,
+                },
+                {
+                    "domain": "airtable.com",
+                    "pattern": "*/pricing*",
+                    "max_urls": 15,
+                },
+                {
+                    "domain": "mongodb.com",
+                    "pattern": "*/pricing*",
+                    "max_urls": 15,
+                },
+                {
+                    "domain": "shopify.com",
+                    "pattern": "*/pricing*",
+                    "max_urls": 15,
+                },
+                {
+                    "domain": "hubspot.com",
+                    "pattern": "*/pricing*",
+                    "max_urls": 15,
+                },
+            ],
+            "job_posting": [
+                {
+                    "domain": "jobs.lever.co",
+                    "pattern": "*/*",
+                    "max_urls": 25,
+                },
+                {
+                    "domain": "boards.greenhouse.io",
+                    "pattern": "*/*",
+                    "max_urls": 25,
+                },
+                {
+                    "domain": "stripe.com",
+                    "pattern": "*/jobs/*",
+                    "max_urls": 20,
+                },
+                {
+                    "domain": "anthropic.com",
+                    "pattern": "*/careers*",
+                    "max_urls": 20,
+                },
+            ],
+            "person": [
+                {
+                    "domain": "stanford.edu",
+                    "pattern": "*/people/*",
+                    "max_urls": 20,
+                },
+                {
+                    "domain": "mit.edu",
+                    "pattern": "*/people/*",
+                    "max_urls": 20,
+                },
+                {
+                    "domain": "berkeley.edu",
+                    "pattern": "*/people/*",
+                    "max_urls": 20,
+                },
+            ],
         }
 
     def _get_fragment_id(self, html: str) -> str:
@@ -124,10 +220,15 @@ class FragmentCollector:
                     queries = {
                         "recipe": "recipe ingredients instructions cooking steps directions",
                         "product": "product price buy purchase specifications details",
+                        "event": "event date time location venue organizer attend",
+                        "pricing_table": "pricing plans features price subscription tier",
+                        "job_posting": "job position title company location department career",
+                        "person": "person profile bio contact team member faculty",
                     }
                     query = queries.get(fragment_type, "")
 
                     # Configure sitemap+cc URL discovery (combines sitemap + Common Crawl)
+                    # TODO: higher max_urls/concurrency
                     seeding_config = SeedingConfig(
                         source="sitemap+cc",  # Use both sitemap and Common Crawl
                         pattern=pattern,
@@ -186,6 +287,14 @@ class FragmentCollector:
             return self._validate_recipe(soup, text)
         elif fragment_type == "product":
             return self._validate_product(soup, text)
+        elif fragment_type == "event":
+            return self._validate_event(soup, text)
+        elif fragment_type == "pricing_table":
+            return self._validate_pricing_table(soup, text)
+        elif fragment_type == "job_posting":
+            return self._validate_job_posting(soup, text)
+        elif fragment_type == "person":
+            return self._validate_person(soup, text)
         else:
             return {
                 "is_valid": True,
@@ -334,6 +443,229 @@ class FragmentCollector:
             "reason": reason,
         }
 
+    def _validate_event(self, soup: BeautifulSoup, text: str) -> dict:
+        """Validate event fragment has title, date, location, etc."""
+        found_fields = []
+        missing_fields = []
+        score = 0.0
+
+        # Check for event title (required)
+        if soup.find(["h1", "h2", "h3"]) or re.search(r"event", text, re.IGNORECASE):
+            found_fields.append("title")
+            score += 0.3
+        else:
+            missing_fields.append("title")
+
+        # Check for datetime (required) - flexible patterns
+        datetime_patterns = [
+            r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}",  # dates like 12/15/2025
+            r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}",  # Dec 15
+            r"\d{1,2}:\d{2}\s*(AM|PM|am|pm)",  # time like 6:00 PM
+            r"(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,",  # day of week
+        ]
+        if any(re.search(pattern, text) for pattern in datetime_patterns):
+            found_fields.append("datetime")
+            score += 0.4
+        else:
+            missing_fields.append("datetime")
+
+        # Check for location/venue (optional but common)
+        location_indicators = [
+            r"location:",
+            r"venue:",
+            r"online",
+            r"virtual",
+            r"\d+\s+[A-Z][a-z]+\s+(Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd)",
+        ]
+        if any(re.search(pattern, text, re.IGNORECASE) for pattern in location_indicators):
+            found_fields.append("location")
+            score += 0.2
+
+        # Check for organizer/attendees (optional)
+        if re.search(r"(organiz|host|by)\s*:", text, re.IGNORECASE) or re.search(
+            r"\d+\s*(attendee|going|interested)", text, re.IGNORECASE
+        ):
+            found_fields.append("organizer_info")
+            score += 0.1
+
+        # Threshold: need at least title + datetime
+        is_valid = "title" in found_fields and "datetime" in found_fields
+
+        reason = (
+            f"Found {len(found_fields)} fields: {', '.join(found_fields)}"
+            if is_valid
+            else f"Missing required fields: {', '.join(missing_fields)}"
+        )
+
+        return {
+            "is_valid": is_valid,
+            "score": min(score, 1.0),
+            "found_fields": found_fields,
+            "missing_fields": missing_fields,
+            "reason": reason,
+        }
+
+    def _validate_pricing_table(self, soup: BeautifulSoup, text: str) -> dict:
+        """Validate pricing table has multiple plans with prices and features."""
+        found_fields = []
+        missing_fields = []
+        score = 0.0
+
+        # Check for pricing indicators
+        price_patterns = [
+            r"\$\d+",
+            r"\d+\s*(USD|EUR|GBP)",
+            r"(free|trial)",
+            r"contact\s+sales",
+            r"/month|/year|monthly|yearly|annually",
+        ]
+        if any(re.search(pattern, text, re.IGNORECASE) for pattern in price_patterns):
+            found_fields.append("pricing_info")
+            score += 0.4
+        else:
+            missing_fields.append("pricing_info")
+
+        # Check for multiple plans (look for plan names like "Basic", "Pro", "Enterprise")
+        plan_indicators = soup.find_all(["h2", "h3", "h4"])
+        if len(plan_indicators) >= 2:
+            found_fields.append("multiple_plans")
+            score += 0.3
+        else:
+            missing_fields.append("multiple_plans (need 2+)")
+
+        # Check for features list
+        list_items = soup.find_all("li")
+        if len(list_items) >= 5:
+            found_fields.append("features")
+            score += 0.3
+
+        # Threshold: need pricing_info + multiple_plans
+        is_valid = "pricing_info" in found_fields and "multiple_plans" in found_fields
+
+        reason = (
+            f"Found {len(found_fields)} fields: {', '.join(found_fields)}"
+            if is_valid
+            else f"Missing required fields: {', '.join(missing_fields)}"
+        )
+
+        return {
+            "is_valid": is_valid,
+            "score": min(score, 1.0),
+            "found_fields": found_fields,
+            "missing_fields": missing_fields,
+            "reason": reason,
+        }
+
+    def _validate_job_posting(self, soup: BeautifulSoup, text: str) -> dict:
+        """Validate job posting has title, company, location (simplified listing format)."""
+        found_fields = []
+        missing_fields = []
+        score = 0.0
+
+        # Check for job title (required)
+        if soup.find(["h1", "h2"]):
+            found_fields.append("title")
+            score += 0.4
+        else:
+            missing_fields.append("title")
+
+        # Check for company name
+        if re.search(r"company:", text, re.IGNORECASE) or soup.find(class_=lambda x: x and "company" in x.lower()):
+            found_fields.append("company")
+            score += 0.3
+        else:
+            # Sometimes company is implicit if it's on their domain
+            found_fields.append("company")
+            score += 0.2
+
+        # Check for location
+        location_patterns = [
+            r"(remote|hybrid|on-?site)",
+            r"(location|based in):",
+            r"[A-Z][a-z]+,\s*[A-Z]{2}",  # City, ST format
+        ]
+        if any(re.search(pattern, text, re.IGNORECASE) for pattern in location_patterns):
+            found_fields.append("location")
+            score += 0.2
+
+        # Check for employment type
+        if re.search(r"(full-?time|part-?time|contract|intern)", text, re.IGNORECASE):
+            found_fields.append("employment_type")
+            score += 0.1
+
+        # Threshold: need at least title
+        is_valid = "title" in found_fields
+
+        reason = (
+            f"Found {len(found_fields)} fields: {', '.join(found_fields)}"
+            if is_valid
+            else f"Missing required fields: {', '.join(missing_fields)}"
+        )
+
+        return {
+            "is_valid": is_valid,
+            "score": min(score, 1.0),
+            "found_fields": found_fields,
+            "missing_fields": missing_fields,
+            "reason": reason,
+        }
+
+    def _validate_person(self, soup: BeautifulSoup, text: str) -> dict:
+        """Validate person profile has name, title/role, and contact or bio."""
+        found_fields = []
+        missing_fields = []
+        score = 0.0
+
+        # Check for name (required) - usually in h1, h2, or h3
+        headings = soup.find_all(["h1", "h2", "h3"])
+        if headings:
+            found_fields.append("name")
+            score += 0.4
+        else:
+            missing_fields.append("name")
+
+        # Check for title/role
+        title_patterns = [
+            r"(professor|dr\.|phd|researcher|engineer|scientist|director|manager)",
+            r"(title|position|role):",
+        ]
+        if any(re.search(pattern, text, re.IGNORECASE) for pattern in title_patterns):
+            found_fields.append("title")
+            score += 0.3
+
+        # Check for bio/description
+        paragraphs = soup.find_all("p")
+        if len(paragraphs) >= 1 and any(len(p.get_text(strip=True)) > 100 for p in paragraphs):
+            found_fields.append("bio")
+            score += 0.2
+
+        # Check for contact info (email, phone, or social links)
+        contact_patterns = [
+            r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",  # email
+            r"linkedin\.com",
+            r"\(\d{3}\)\s*\d{3}-\d{4}",  # phone
+        ]
+        if any(re.search(pattern, text, re.IGNORECASE) for pattern in contact_patterns):
+            found_fields.append("contact")
+            score += 0.1
+
+        # Threshold: need at least name + (title OR bio)
+        is_valid = "name" in found_fields and ("title" in found_fields or "bio" in found_fields)
+
+        reason = (
+            f"Found {len(found_fields)} fields: {', '.join(found_fields)}"
+            if is_valid
+            else f"Missing required fields: {', '.join(missing_fields)}"
+        )
+
+        return {
+            "is_valid": is_valid,
+            "score": min(score, 1.0),
+            "found_fields": found_fields,
+            "missing_fields": missing_fields,
+            "reason": reason,
+        }
+
     async def fetch_page(self, url: str) -> str | None:
         """Fetch HTML from URL using Crawl4AI."""
         try:
@@ -371,6 +703,48 @@ class FragmentCollector:
                 soup.find("article")
                 or soup.find("main")
                 or soup.find("div", class_=lambda x: x and "recipe" in x.lower())
+            )
+            if candidates:
+                return str(candidates)
+
+        elif fragment_type == "event":
+            # Try to find event container
+            candidates = (
+                soup.find("article")
+                or soup.find("main")
+                or soup.find("div", class_=lambda x: x and "event" in x.lower())
+                or soup.find("section", class_=lambda x: x and "event" in x.lower())
+            )
+            if candidates:
+                return str(candidates)
+
+        elif fragment_type == "pricing_table":
+            # Try to find pricing container
+            candidates = (
+                soup.find("section", class_=lambda x: x and "pricing" in x.lower())
+                or soup.find("div", class_=lambda x: x and "pricing" in x.lower())
+                or soup.find("main")
+            )
+            if candidates:
+                return str(candidates)
+
+        elif fragment_type == "job_posting":
+            # Try to find job posting container
+            candidates = (
+                soup.find("article")
+                or soup.find("main")
+                or soup.find("div", class_=lambda x: x and ("job" in x.lower() or "posting" in x.lower()))
+            )
+            if candidates:
+                return str(candidates)
+
+        elif fragment_type == "person":
+            # Try to find person profile container
+            candidates = (
+                soup.find("article")
+                or soup.find("main")
+                or soup.find("div", class_=lambda x: x and ("profile" in x.lower() or "person" in x.lower()))
+                or soup.find("section", class_=lambda x: x and "bio" in x.lower())
             )
             if candidates:
                 return str(candidates)
@@ -440,6 +814,65 @@ class FragmentCollector:
                 "ingredients": ["TODO: Ingredient 1", "TODO: Ingredient 2"],
                 "instructions": ["TODO: Step 1", "TODO: Step 2"],
                 "rating": None,
+            }
+        elif fragment_type == "event":
+            template = {
+                "type": "event",
+                "title": "TODO: Extract event title",
+                "datetime": "TODO: e.g., 'Tue, Dec 16 · 6:00 PM SST'",
+                "location": "TODO: Extract location (or 'Online')",
+                "venue_name": "TODO: Extract venue name (or null)",
+                "price": "TODO: e.g., 'Free', '$25', or null",
+                "organizer": "TODO: Extract organizer (or null)",
+                "attendee_count": None,
+                "description": "TODO: Extract description (or null)",
+                "event_type": "TODO: 'online' or 'in_person' (or null)",
+            }
+        elif fragment_type == "pricing_table":
+            template = {
+                "type": "pricing_table",
+                "plans": [
+                    {
+                        "name": "TODO: Plan 1 name (e.g., 'Basic')",
+                        "price": "TODO: e.g., 'Free', '$10/month'",
+                        "price_amount": None,
+                        "currency": "USD",
+                        "billing_period": "TODO: 'month', 'year', or 'one_time'",
+                        "features": ["TODO: Feature 1", "TODO: Feature 2"],
+                        "description": "TODO: Plan description (or null)",
+                    },
+                    {
+                        "name": "TODO: Plan 2 name (e.g., 'Pro')",
+                        "price": "TODO: e.g., '$29/month'",
+                        "price_amount": 29.0,
+                        "currency": "USD",
+                        "billing_period": "month",
+                        "features": ["TODO: Feature 1", "TODO: Feature 2"],
+                        "description": "TODO: Plan description (or null)",
+                    },
+                ],
+            }
+        elif fragment_type == "job_posting":
+            template = {
+                "type": "job_posting",
+                "title": "TODO: Extract job title",
+                "company": "TODO: Extract company name",
+                "location": "TODO: e.g., 'Remote', 'San Francisco, CA'",
+                "department": "TODO: Extract department (or null)",
+                "posted_date": "TODO: e.g., '4 days ago', '2025-12-15'",
+                "employment_type": "TODO: e.g., 'Full-time' (or null)",
+                "description": "TODO: Extract job description snippet (or null)",
+            }
+        elif fragment_type == "person":
+            template = {
+                "type": "person",
+                "name": "TODO: Extract person name",
+                "title": "TODO: Extract title/role (or null)",
+                "bio": "TODO: Extract bio (or null)",
+                "email": "TODO: Extract email (or null)",
+                "phone": "TODO: Extract phone (or null)",
+                "linkedin": "TODO: Extract LinkedIn URL (or null)",
+                "image_url": "TODO: Extract profile image URL (or null)",
             }
         else:
             template = {"type": fragment_type, "TODO": "Define schema"}
@@ -560,16 +993,21 @@ Examples:
   # Collect only products
   python scripts/00_collect.py --categories product
 
+  # Collect events and pricing tables
+  python scripts/00_collect.py --categories event pricing_table
+
   # Run in parallel (separate terminals)
   python scripts/00_collect.py --categories recipe &
   python scripts/00_collect.py --categories product &
+  python scripts/00_collect.py --categories event &
+  python scripts/00_collect.py --categories pricing_table &
         """,
     )
     parser.add_argument(
         "--categories",
         "-c",
         nargs="+",
-        choices=["recipe", "product"],
+        choices=["recipe", "product", "event", "pricing_table", "job_posting", "person"],
         help="Categories to collect (default: all)",
     )
 

@@ -70,6 +70,19 @@ class EventSchema(BaseModel):
     description: str | None = None
     event_type: Literal["online", "in_person"] | None = None
 
+    VALIDATION_PATTERNS: ClassVar[list[str]] = [
+        r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}",  # dates: 12/15/2025, 12-15-25
+        r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}",  # Dec 15, January 1
+        r"\d{1,2}:\d{2}\s*(AM|PM|am|pm)",  # time: 6:00 PM, 14:30
+        r"(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,",  # day of week: Monday, Tue,
+        r"(location|venue|address):",  # location indicators
+        r"(online|virtual|remote|in-person|hybrid)",  # event type
+        r"(organiz|host|presented by)",  # organizer indicators
+        r"\d+\s*(attendee|going|interested|registered)",  # attendee count
+        r"(free|sold out|\$\d+)",  # price indicators
+        r"(RSVP|register|ticket|admission)",  # event-specific terms
+    ]
+
 
 class PricingPlanSchema(BaseModel):
     name: str
@@ -85,6 +98,19 @@ class PricingTableSchema(BaseModel):
     type: Literal["pricing_table"]
     plans: list[PricingPlanSchema]
 
+    VALIDATION_PATTERNS: ClassVar[list[str]] = [
+        r"\$\d+",  # price: $10, $99
+        r"\d+\s*(USD|EUR|GBP|CAD)",  # price with currency
+        r"(free|trial|custom pricing|contact sales)",  # free/custom tiers
+        r"(/month|/year|/mo|/yr|monthly|yearly|annually|per month|per year)",  # billing period
+        r"(basic|pro|premium|enterprise|starter|business|team|individual)",  # common plan names
+        r"(feature|includes?|what's included)",  # feature list indicators
+        r"(unlimited|limited|\d+\s*(user|GB|TB|project|API call))",  # feature quantifiers
+        r"(tier|plan|pricing|subscription|package)",  # pricing table indicators
+        r"(billed|charged|payment|invoice)",  # billing terms
+        r"(most popular|recommended|best value)",  # plan highlights
+    ]
+
 
 class JobPostingSchema(BaseModel):
     type: Literal["job_posting"]
@@ -96,6 +122,21 @@ class JobPostingSchema(BaseModel):
     employment_type: str | None = None
     description: str | None = None
 
+    VALIDATION_PATTERNS: ClassVar[list[str]] = [
+        r"(engineer|developer|manager|designer|analyst|scientist|director|lead|senior|junior)",  # job titles
+        r"(full-?time|part-?time|contract|temporary|intern|internship)",  # employment type
+        r"(remote|hybrid|on-?site|in-office|work from home)",  # work location type
+        r"[A-Z][a-z]+,\s*[A-Z]{2}",  # location: City, ST format
+        r"(department|team|division):",  # department indicators
+        r"(posted|updated)\s*(on|:)?\s*\d",  # posted date indicators
+        r"(\d+\s*days?|week|month)\s*ago",  # relative dates: "3 days ago"
+        r"(position|role|job|career|opportunity)",  # job posting terms
+        r"(apply|application|candidate|applicant)",  # application terms
+        r"(company|organization|employer):",  # company indicators
+        r"(salary|compensation|pay|benefits)",  # compensation mentions (rare but useful)
+        r"(requirement|qualification|experience|skill)",  # job requirements
+    ]
+
 
 class PersonSchema(BaseModel):
     type: Literal["person"]
@@ -106,6 +147,21 @@ class PersonSchema(BaseModel):
     phone: str | None = None
     linkedin: str | None = None
     image_url: str | None = None
+
+    VALIDATION_PATTERNS: ClassVar[list[str]] = [
+        r"(professor|dr\.|ph\.?d|researcher|scientist|faculty|lecturer|instructor)",  # academic titles
+        r"(engineer|developer|designer|manager|director|VP|CEO|CTO|founder)",  # professional titles
+        r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",  # email address
+        r"\(\d{3}\)\s*\d{3}-\d{4}",  # phone: (555) 123-4567
+        r"\d{3}-\d{3}-\d{4}",  # phone: 555-123-4567
+        r"linkedin\.com/(in|pub)/",  # LinkedIn profile URL
+        r"(biography|bio|about|profile|background):",  # bio section indicators
+        r"(education|degree|university|college)",  # educational background
+        r"(research|publication|interest|expertise|specialization)",  # academic/professional interests
+        r"(contact|email|phone|office|reach):",  # contact information indicators
+        r"(title|position|role):",  # title/position indicators
+        r"(department|division|group|lab|team):",  # organizational affiliation
+    ]
 
 
 # Negative Schemas
