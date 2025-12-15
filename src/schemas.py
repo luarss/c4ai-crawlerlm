@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, Field
 
@@ -26,6 +26,14 @@ class ProductSchema(BaseModel):
     availability: Literal["in_stock", "out_of_stock", "pre_order", "limited"] | None = None
     image_url: str | None = None
 
+    VALIDATION_PATTERNS: ClassVar[list[str]] = [
+        r"\$\d+\.?\d*",  # price
+        r"\d+\.?\d*\s*(USD|EUR|GBP)",  # price with currency
+        r"rating:\s*\d+(\.\d+)?",  # rating
+        r"\d+(\.\d+)?\s*star",  # star rating
+        r"★+",  # star symbols
+    ]
+
 
 class ReviewSchema(BaseModel):
     type: Literal["review"]
@@ -36,6 +44,15 @@ class ReviewSchema(BaseModel):
     date: str
     body: str
     helpful_count: int | None = Field(None, ge=0)
+
+    VALIDATION_PATTERNS: ClassVar[list[str]] = [
+        r"\d+(\.\d+)?\s*star",  # star rating
+        r"rating:\s*\d+(\.\d+)?",  # rating score
+        r"★+",  # star symbols
+        r"\d{1,2}/\d{1,2}/\d{4}",  # date mm/dd/yyyy
+        r"\d{4}-\d{2}-\d{2}",  # date yyyy-mm-dd
+        r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4}",  # date Mon DD, YYYY
+    ]
 
 
 class RecipeSchema(BaseModel):
@@ -50,6 +67,15 @@ class RecipeSchema(BaseModel):
     ingredients: list[str]
     instructions: list[str]
     rating: RatingSchema | None = None
+
+    VALIDATION_PATTERNS: ClassVar[list[str]] = [
+        r"\d+\s*(cup|tablespoon|teaspoon|ounce|pound|gram|ml|tsp|tbsp|oz|lb|g)",  # ingredient measurements
+        r"\d+/\d+",  # fractions
+        r"\d+\s*(large|medium|small|whole)",  # counts
+        r"(preheat|mix|stir|cook|bake|add|combine|heat|blend|whisk|pour|chop|slice|dice)",  # cooking verbs
+        r"\d+\s*(min|minute|hour|hr)s?",  # timing
+        r"(serves?|yield|makes?)\s*:?\s*\d+",  # servings
+    ]
 
 
 class EventSchema(BaseModel):
@@ -143,3 +169,9 @@ def get_schema(fragment_type: str) -> type[BaseModel]:
         valid_types = ", ".join(SCHEMA_REGISTRY.keys())
         raise ValueError(f"Unknown fragment type: {fragment_type}. Valid types: {valid_types}")
     return SCHEMA_REGISTRY[fragment_type]
+
+
+def get_validation_patterns(fragment_type: str) -> dict:
+    """Get validation patterns for a fragment type from its schema."""
+    schema = get_schema(fragment_type)
+    return getattr(schema, "VALIDATION_PATTERNS", {})
