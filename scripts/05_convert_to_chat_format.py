@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Convert the dataset to Qwen3 chat format for SFT.
 

@@ -1,3 +1,11 @@
+"""
+Extract minimal HTML fragments that contain the text content.
+
+This script analyzes each HTML file and finds the smallest subtree that contains
+a high percentage of the extracted text (default 95%). This significantly reduces
+token counts while preserving the content-bearing HTML structure.
+"""
+
 import argparse
 import json
 from pathlib import Path

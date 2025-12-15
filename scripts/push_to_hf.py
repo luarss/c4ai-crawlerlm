@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Push the CrawlerLM dataset to HuggingFace Hub.
 
