@@ -9,8 +9,9 @@ expected by Qwen3 models for fine-tuning.
 import json
 from pathlib import Path
 
-from qwen_utils import count_chat_tokens
 from tqdm import tqdm
+
+from src.qwen_utils import count_chat_tokens
 
 TRAIN_INPUT = Path("data/processed/train.jsonl")
 VAL_INPUT = Path("data/processed/val.jsonl")

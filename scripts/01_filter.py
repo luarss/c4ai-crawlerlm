@@ -14,7 +14,8 @@ from collections import Counter
 from pathlib import Path
 
 from bs4 import BeautifulSoup
-from qwen_utils import count_tokens
+
+from src.qwen_utils import count_tokens
 
 
 def detect_spa_or_dynamic(html: str, soup: BeautifulSoup) -> bool:
