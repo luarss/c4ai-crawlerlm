@@ -10,3 +10,7 @@ format:
 .PHONY: check
 check:
 	@ruff check .
+
+.PHONY: label
+label:
+	@streamlit run scripts/label_app.py
