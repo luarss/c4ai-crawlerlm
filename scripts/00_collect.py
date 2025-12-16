@@ -21,6 +21,8 @@ class FragmentCollector:
         self.project_root = project_root
         self.candidates_dir = project_root / "data" / "seeds" / "candidates"
         self.candidates_dir.mkdir(parents=True, exist_ok=True)
+        self.negatives_dir = project_root / "data" / "seeds" / "negatives"
+        self.negatives_dir.mkdir(parents=True, exist_ok=True)
 
         # Domain-based configuration for auto-discovery
         # Each domain has pattern, query, and target count
@@ -144,25 +146,70 @@ class FragmentCollector:
                 },
             ],
             "job_posting": [
+                # Job board aggregators
                 {
                     "domain": "jobs.lever.co",
                     "pattern": "*/*",
-                    "max_urls": 25,
+                    "max_urls": 50,
                 },
                 {
                     "domain": "boards.greenhouse.io",
                     "pattern": "*/*",
-                    "max_urls": 25,
+                    "max_urls": 50,
                 },
+                {
+                    "domain": "job-boards.greenhouse.io",
+                    "pattern": "*/*",
+                    "max_urls": 50,
+                },
+                # Remote job boards (tend to have clean HTML)
+                {
+                    "domain": "remoteok.com",
+                    "pattern": "*/remote-jobs/*",
+                    "max_urls": 50,
+                },
+                {
+                    "domain": "weworkremotely.com",
+                    "pattern": "*/remote-jobs/*",
+                    "max_urls": 50,
+                },
+                {
+                    "domain": "remote.co",
+                    "pattern": "*/remote-jobs/*",
+                    "max_urls": 50,
+                },
+                # Startup job boards
+                {
+                    "domain": "wellfound.com",
+                    "pattern": "*/jobs/*",
+                    "max_urls": 50,
+                },
+                {
+                    "domain": "ycombinator.com",
+                    "pattern": "*/jobs/*",
+                    "max_urls": 30,
+                },
+                # Company career pages (keep existing)
                 {
                     "domain": "stripe.com",
                     "pattern": "*/jobs/*",
-                    "max_urls": 20,
+                    "max_urls": 30,
                 },
                 {
                     "domain": "anthropic.com",
                     "pattern": "*/careers*",
-                    "max_urls": 20,
+                    "max_urls": 30,
+                },
+                # Tech company career pages
+                {
+                    "domain": "openai.com",
+                    "pattern": "*/careers/*",
+                    "max_urls": 30,
+                },
+                {
+                    "domain": "google.com",
+                    "pattern": "*/careers/*",
+                    "max_urls": 30,
                 },
             ],
             "person": [
@@ -786,6 +833,63 @@ class FragmentCollector:
         print(f"  Found fields: {', '.join(validation_result['found_fields'])}")
         print(f"  Files: {html_path.name}, {metadata_path.name}")
 
+    def save_negative_fragment(self, fragment_html: str, fragment_type: str, source_url: str, validation_result: dict):
+        """Save rejected fragment as negative example."""
+        fragment_id = self._get_fragment_id(fragment_html)
+
+        # Save HTML
+        html_path = self.negatives_dir / f"{fragment_type}_{fragment_id}.html"
+        html_path.write_text(fragment_html)
+
+        # Save metadata with rejection reason
+        metadata = {
+            "fragment_id": fragment_id,
+            "expected_type": fragment_type,  # What it was supposed to be
+            "source_url": source_url,
+            "status": "negative",
+            "rejection_reason": validation_result["reason"],
+            "validation": {
+                "score": validation_result["score"],
+                "found_fields": validation_result["found_fields"],
+                "missing_fields": validation_result["missing_fields"],
+            },
+            "requires_annotation": True,
+        }
+        metadata_path = self.negatives_dir / f"{fragment_type}_{fragment_id}.json"
+        metadata_path.write_text(json.dumps(metadata, indent=2))
+
+        # Create negative annotation template
+        self._create_negative_annotation_template(fragment_type, fragment_id, validation_result)
+
+        print(f"✓ Saved negative {fragment_type} fragment: {fragment_id} (score: {validation_result['score']:.2f})")
+        print(f"  Rejection: {validation_result['reason']}")
+        print(f"  Files: {html_path.name}, {metadata_path.name}")
+
+    def _create_negative_annotation_template(self, fragment_type: str, fragment_id: str, validation_result: dict):
+        """Create annotation template for negative examples."""
+        template_path = self.negatives_dir / f"{fragment_type}_{fragment_id}_annotation.json"
+
+        # For negatives, we want to extract the fragment that shows WHY it's negative
+        template = {
+            "type": "negative",
+            "expected_type": fragment_type,
+            "rejection_reason": validation_result["reason"],
+            "missing_fields": validation_result["missing_fields"],
+            # What should be extracted to demonstrate this is a negative example?
+            "negative_indicator_fragment": (
+                "TODO: Extract the HTML fragment that shows why this is negative "
+                "(e.g., 'Missing ingredients list', 'No price found', etc.)"
+            ),
+            "extracted_fields": {
+                "found": validation_result["found_fields"],
+                "values": "TODO: What values were actually found (if any)? Use null for missing required fields",
+            },
+            "notes": "TODO: Any additional notes about why this failed validation",
+        }
+
+        template_path.write_text(json.dumps(template, indent=2))
+        print(f"  Negative annotation template: {template_path.name}")
+
     def _create_annotation_template(self, fragment_type: str, fragment_id: str):
         """Create JSON annotation template."""
         template_path = self.candidates_dir / f"{fragment_type}_{fragment_id}_annotation.json"
@@ -948,6 +1052,8 @@ class FragmentCollector:
 
                     if not validation_result["is_valid"]:
                         print(f"    ✗ Fragment rejected - {validation_result['reason']}")
+                        # Save as negative example
+                        self.save_negative_fragment(fragment_html, fragment_type, url, validation_result)
                         total_rejected += 1
                         validation_stats["invalid"] += 1
                         continue
@@ -962,18 +1068,24 @@ class FragmentCollector:
         print("✅ Collection complete!")
         print("=" * 70)
         print(f"Discovered: {total_discovered} URLs")
-        print(f"Collected: {total_collected} fragments")
-        print(f"Rejected: {total_rejected} fragments")
+        print(f"Collected (positive): {total_collected} fragments")
+        print(f"Collected (negative): {total_rejected} fragments")
         if total_collected > 0:
             avg_score = validation_stats["total_score"] / total_collected
             print(f"Average quality score: {avg_score:.2f}")
             success_rate = (total_collected / total_discovered) * 100
             print(f"Success rate: {success_rate:.1f}%")
+            rejection_rate = (total_rejected / total_discovered) * 100
+            print(f"Rejection rate: {rejection_rate:.1f}%")
         print("=" * 70)
         print("\nNext steps:")
-        print("1. Review fragments in data/seeds/candidates/")
-        print("2. Fill in annotation templates (*_annotation.json)")
-        print("3. Use streamlit app: streamlit run scripts/label_app.py")
+        print("1. Review positive fragments in data/seeds/candidates/")
+        print("2. Review negative fragments in data/seeds/negatives/")
+        print("3. Fill in annotation templates (*_annotation.json)")
+        print("4. Use streamlit app: streamlit run scripts/label_app.py")
+        print("\nNote: E-commerce and job posting sites typically have high rejection")
+        print("rates due to SPAs, login walls, and missing fields - these make")
+        print("excellent negative examples for training!")
         print("=" * 70 + "\n")
 
 
