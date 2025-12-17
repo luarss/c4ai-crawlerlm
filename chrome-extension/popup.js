@@ -2,11 +2,19 @@
 let currentHTML = '';
 let currentURL = '';
 
+// URL list management
+let urlList = [];
+let currentUrlIndex = 0;
+
 // DOM elements
+const loadUrlsBtn = document.getElementById('loadUrlsBtn');
+const openNextUrlBtn = document.getElementById('openNextUrlBtn');
+const urlStatus = document.getElementById('urlStatus');
 const selectFragmentBtn = document.getElementById('selectFragmentBtn');
 const selectBodyBtn = document.getElementById('selectBodyBtn');
 const htmlPreview = document.getElementById('htmlPreview');
 const charCount = document.getElementById('charCount');
+const fragmentCount = document.getElementById('fragmentCount');
 const fragmentTypeSelect = document.getElementById('fragmentType');
 const jsonEditor = document.getElementById('jsonEditor');
 const validationMessage = document.getElementById('validationMessage');
@@ -14,6 +22,8 @@ const saveBtn = document.getElementById('saveBtn');
 const clearBtn = document.getElementById('clearBtn');
 
 // Event listeners
+loadUrlsBtn.addEventListener('click', handleLoadUrls);
+openNextUrlBtn.addEventListener('click', handleOpenNextUrl);
 selectFragmentBtn.addEventListener('click', handleSelectFragment);
 selectBodyBtn.addEventListener('click', handleSelectBody);
 fragmentTypeSelect.addEventListener('change', handleFragmentTypeChange);
@@ -21,19 +31,84 @@ jsonEditor.addEventListener('input', handleJsonEdit);
 saveBtn.addEventListener('click', handleSave);
 clearBtn.addEventListener('click', handleClear);
 
-// Listen for messages from content script
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'htmlSelected') {
-    currentHTML = request.html;
-    currentURL = request.url;
-    displayHTML(request.html);
+// Note: Message handling moved to background.js
+// The popup will restore state from chrome.storage when opened
 
-    // If fragment type is selected, trigger auto-extraction
-    if (fragmentTypeSelect.value) {
-      loadTemplateWithExtraction();
+/**
+ * Handle "Load URLs" button click
+ */
+async function handleLoadUrls() {
+  try {
+    // Show loading state
+    urlStatus.textContent = '📋 Loading URLs from server...';
+    urlStatus.className = 'url-status loading';
+    loadUrlsBtn.disabled = true;
+
+    // Fetch URLs from server
+    const response = await fetch('http://localhost:8000/urls');
+    const result = await response.json();
+
+    if (response.ok && result.success) {
+      urlList = result.urls;
+      currentUrlIndex = 0;
+
+      // Show success message
+      urlStatus.textContent = `✓ Loaded ${result.count} URLs (0/${result.count} opened)`;
+      urlStatus.className = 'url-status active';
+
+      // Enable "Open Next URL" button
+      openNextUrlBtn.disabled = false;
+
+      // Save state
+      saveState();
+    } else {
+      throw new Error(result.error || 'Failed to load URLs');
     }
+  } catch (error) {
+    console.error('Error loading URLs:', error);
+
+    // Check if server is running
+    if (error.message.includes('fetch') || error.message.includes('NetworkError')) {
+      urlStatus.textContent = '✗ Server not running! Start: python annotation_server.py';
+    } else {
+      urlStatus.textContent = '✗ Failed to load URLs: ' + error.message;
+    }
+    urlStatus.className = 'url-status loading';
+  } finally {
+    loadUrlsBtn.disabled = false;
   }
-});
+}
+
+/**
+ * Handle "Open Next URL" button click
+ */
+async function handleOpenNextUrl() {
+  if (currentUrlIndex >= urlList.length) {
+    urlStatus.textContent = '✓ All URLs opened! You\'ve completed the list.';
+    urlStatus.className = 'url-status active';
+    openNextUrlBtn.disabled = true;
+    return;
+  }
+
+  const nextUrl = urlList[currentUrlIndex];
+  currentUrlIndex++;
+
+  // Open URL in a new tab
+  await chrome.tabs.create({ url: nextUrl, active: true });
+
+  // Update status
+  urlStatus.textContent = `📍 Opened URL ${currentUrlIndex}/${urlList.length}: ${nextUrl.substring(0, 60)}...`;
+  urlStatus.className = 'url-status active';
+
+  // Update button text if this is the last URL
+  if (currentUrlIndex >= urlList.length) {
+    openNextUrlBtn.textContent = '✓ All URLs Opened';
+    openNextUrlBtn.disabled = true;
+  }
+
+  // Save state
+  saveState();
+}
 
 /**
  * Handle "Select Fragment" button click
@@ -85,10 +160,17 @@ async function handleSelectBody() {
 /**
  * Display HTML in preview textarea
  */
-function displayHTML(html) {
+function displayHTML(html, count = 1) {
   // Store full HTML but display truncated version if too long
   htmlPreview.value = html;
   updateCharCount(html.length);
+
+  // Update fragment count display
+  if (count > 1) {
+    fragmentCount.textContent = `(${count} fragments)`;
+  } else {
+    fragmentCount.textContent = '';
+  }
 
   // Enable save button if both HTML and JSON are valid
   updateSaveButtonState();
@@ -111,10 +193,12 @@ function handleFragmentTypeChange() {
     jsonEditor.value = '';
     jsonEditor.placeholder = 'Select a fragment type to load the template...';
     updateSaveButtonState();
+    saveState();
     return;
   }
 
   loadTemplateWithExtraction();
+  saveState();
 }
 
 /**
@@ -154,6 +238,7 @@ function loadTemplateWithExtraction() {
 function handleJsonEdit() {
   validateJSON();
   updateSaveButtonState();
+  saveState();
 }
 
 /**
@@ -235,10 +320,14 @@ function updateSaveButtonState() {
 /**
  * Handle save button click
  */
-function handleSave() {
+async function handleSave() {
   if (saveBtn.disabled) return;
 
   try {
+    // Disable save button during save
+    saveBtn.disabled = true;
+    saveBtn.textContent = '💾 Saving...';
+
     // Parse JSON
     const label = JSON.parse(jsonEditor.value);
 
@@ -250,48 +339,51 @@ function handleSave() {
       timestamp: new Date().toISOString()
     };
 
-    // Generate filename
-    const fragmentType = fragmentTypeSelect.value;
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    const filename = `annotation_${fragmentType}_${timestamp}.json`;
-
-    // Convert to JSON blob
-    const jsonBlob = new Blob([JSON.stringify(annotation, null, 2)], {
-      type: 'application/json'
+    // Send to local server
+    const response = await fetch('http://localhost:8000/save', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(annotation)
     });
 
-    // Create download URL
-    const url = URL.createObjectURL(jsonBlob);
+    const result = await response.json();
 
-    // Trigger download
-    chrome.downloads.download({
-      url: url,
-      filename: filename,
-      saveAs: true
-    }, (downloadId) => {
-      if (chrome.runtime.lastError) {
-        console.error('Download error:', chrome.runtime.lastError);
-        alert('Failed to save annotation: ' + chrome.runtime.lastError.message);
-      } else {
-        // Show success message
-        showValidationSuccess('✓ Annotation saved successfully!');
+    if (response.ok && result.success) {
+      // Show success message with filename
+      showValidationSuccess(`✓ Saved: ${result.filename}`);
 
-        // Optional: Auto-clear after save
-        // setTimeout(handleClear, 2000);
-      }
-    });
+      // Auto-clear after 1.5 seconds
+      setTimeout(() => {
+        handleClear(true); // Pass true to skip confirmation
+      }, 1500);
+    } else {
+      throw new Error(result.error || 'Server returned error');
+    }
 
   } catch (error) {
     console.error('Error saving annotation:', error);
-    alert('Failed to save annotation: ' + error.message);
+
+    // Check if server is running
+    if (error.message.includes('fetch') || error.message.includes('NetworkError')) {
+      showValidationError('✗ Server not running! Start: python annotation_server.py');
+    } else {
+      showValidationError('✗ Failed to save: ' + error.message);
+    }
+  } finally {
+    // Re-enable save button
+    saveBtn.disabled = false;
+    saveBtn.textContent = '💾 Save Annotation';
+    updateSaveButtonState(); // Recheck state
   }
 }
 
 /**
  * Handle clear button click
  */
-function handleClear() {
-  if (confirm('Clear all fields and start over?')) {
+function handleClear(skipConfirmation = false) {
+  if (skipConfirmation || confirm('Clear all fields and start over?')) {
     currentHTML = '';
     currentURL = '';
     htmlPreview.value = '';
@@ -301,10 +393,88 @@ function handleClear() {
     jsonEditor.placeholder = 'Select a fragment type to load the template...';
     clearValidationMessage();
     updateSaveButtonState();
+    saveState();
+  }
+}
+
+/**
+ * Save state to chrome.storage
+ */
+function saveState() {
+  chrome.storage.local.get('popupState', (result) => {
+    const state = result.popupState || {};
+
+    // Update state with current values
+    state.currentHTML = currentHTML;
+    state.currentURL = currentURL;
+    state.urlList = urlList;
+    state.currentUrlIndex = currentUrlIndex;
+    state.fragmentType = fragmentTypeSelect.value;
+    state.jsonEditorValue = jsonEditor.value;
+    // Preserve fragmentCount from previous state if it exists
+    // (it will be set by background.js when new selection is made)
+
+    chrome.storage.local.set({ popupState: state });
+  });
+}
+
+/**
+ * Restore state from chrome.storage
+ */
+async function restoreState() {
+  const result = await chrome.storage.local.get('popupState');
+  const state = result.popupState;
+
+  if (state) {
+    // Restore URL list state
+    if (state.urlList && state.urlList.length > 0) {
+      urlList = state.urlList;
+      currentUrlIndex = state.currentUrlIndex || 0;
+
+      urlStatus.textContent = `✓ Loaded ${urlList.length} URLs (${currentUrlIndex}/${urlList.length} opened)`;
+      urlStatus.className = 'url-status active';
+      openNextUrlBtn.disabled = currentUrlIndex >= urlList.length;
+
+      if (currentUrlIndex >= urlList.length) {
+        openNextUrlBtn.textContent = '✓ All URLs Opened';
+      }
+    }
+
+    // Restore HTML selection
+    if (state.currentHTML) {
+      currentHTML = state.currentHTML;
+      currentURL = state.currentURL;
+      displayHTML(state.currentHTML, state.fragmentCount || 1);
+    }
+
+    // Restore fragment type
+    if (state.fragmentType) {
+      fragmentTypeSelect.value = state.fragmentType;
+    }
+
+    // Restore JSON editor (only if not a new selection)
+    if (state.jsonEditorValue && !state.newSelectionMade) {
+      jsonEditor.value = state.jsonEditorValue;
+      validateJSON();
+    }
+
+    // If a new selection was made, trigger auto-extraction
+    if (state.newSelectionMade && state.currentHTML) {
+      if (fragmentTypeSelect.value) {
+        loadTemplateWithExtraction();
+      }
+
+      // Clear the flag
+      state.newSelectionMade = false;
+      chrome.storage.local.set({ popupState: state });
+    }
+
+    updateSaveButtonState();
   }
 }
 
 // Initialize on load
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  await restoreState();
   updateSaveButtonState();
 });

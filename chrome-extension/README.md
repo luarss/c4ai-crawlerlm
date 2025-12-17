@@ -4,30 +4,50 @@ A Chrome extension for manually annotating HTML fragments with structured JSON l
 
 ## Features
 
-- 🎯 **Element Selection**: Click to select any HTML element on a webpage
+- 📋 **URL List Loader**: Load and open domains from `DOMAIN_LIST.md` one by one
+- 🎯 **Multi-Fragment Selection**: Select multiple HTML elements from a page and combine them
 - 📄 **Full Page Capture**: Capture entire `<body>` HTML
 - 🏷️ **Schema Templates**: Pre-defined templates for recipe, event, job, person, pricing, and negative examples
 - 🤖 **Auto-Extraction**: Basic field pre-population from HTML structure
 - ✓ **JSON Validation**: Real-time validation with error messages
-- 💾 **Export**: Download annotations as JSON files
+- 💾 **Auto-Save**: Automatically saves to `./data/manual/` via local server
+- 🔄 **Auto-Clear**: Clears form after successful save for rapid batch annotation
+- 💾 **State Persistence**: Keeps your selections even when popup loses focus
 
 ## Installation
 
-### 1. Add Extension Icon (Required)
+### 1. Install Dependencies (First Time Only)
 
-The extension requires an icon file. Create or download a 128x128 PNG icon:
+The server requires FastAPI and uvicorn:
 
 ```bash
-# Option 1: Create a simple placeholder icon using ImageMagick
-convert -size 128x128 xc:#667eea -pointsize 48 -fill white -gravity center -annotate +0+0 "🏷️" icon.png
-
-# Option 2: Use any 128x128 PNG image and name it icon.png
-# Place it in the chrome-extension/ directory
+# Install all dev dependencies (from project root)
+uv sync --all-extras
 ```
 
-Or create a simple icon manually and save it as `icon.png` in the `chrome-extension/` directory.
+### 2. Start the Local Server (Required)
 
-### 2. Load Extension in Chrome
+The extension saves annotations to `./data/manual/` and loads domains from `DOMAIN_LIST.md` via a local server. Start it first:
+
+```bash
+cd chrome-extension
+python annotation_server.py
+```
+
+You should see:
+```
+🚀 Annotation Server Running
+Listening on: http://localhost:8000
+Saving to: ../data/manual/
+
+Endpoints:
+  GET  /urls  - Fetch URL list
+  POST /save  - Save annotation
+```
+
+**Keep this server running** while using the extension.
+
+### 3. Load Extension in Chrome
 
 1. Open Chrome and navigate to `chrome://extensions/`
 2. Enable "Developer mode" (toggle in top-right corner)
@@ -37,9 +57,27 @@ Or create a simple icon manually and save it as `icon.png` in the `chrome-extens
 
 ## Usage
 
+### Step 0 (Optional): Load Domain List
+
+The extension can automatically load domains from `DOMAIN_LIST.md` and open them one by one:
+
+1. Click "Load URL List" button
+2. The extension will fetch all domains from DOMAIN_LIST.md (~70+ domains)
+3. Click "Open Next URL" to open each domain in a new tab
+4. The status bar shows your progress (e.g., "Opened URL 5/70")
+5. Continue clicking "Open Next URL" and annotating each page
+
+This is perfect for batch annotation workflows where you need to collect HTML fragments from all domains in your list.
+
 ### Step 1: Navigate to a Webpage
 
 Go to any webpage you want to annotate (e.g., a recipe page, product listing, event page, etc.)
+
+**Option A: Use the URL Loader (recommended for batch annotation)**
+- Use the "Load URL List" and "Open Next URL" buttons (see Step 0 above)
+
+**Option B: Navigate manually**
+- Visit any webpage directly
 
 ### Step 2: Open Extension
 
@@ -47,12 +85,15 @@ Click the extension icon in your Chrome toolbar to open the popup.
 
 ### Step 3: Select HTML
 
-**Option A: Select Fragment**
+**Option A: Select Multiple Fragments**
 1. Click "Select Fragment" button
-2. A blue banner will appear: "Selection Mode Active"
+2. A banner will appear: "Multi-Fragment Selection - Click elements to add"
 3. Hover over elements on the page (they'll be highlighted in blue)
-4. Click any element to select it
-5. Press `Esc` to cancel selection
+4. Click elements to select them (they turn green)
+5. Click selected elements again to deselect them
+6. The banner shows count: "(3 selected)"
+7. Click "Done" when finished, or "Cancel (Esc)" to abort
+8. Multiple fragments are combined with separators
 
 **Option B: Select Full Body**
 - Click "Select Full Body" to capture the entire page HTML
@@ -83,8 +124,14 @@ Review and edit the JSON to accurately represent the HTML content. Replace any "
 
 ### Step 6: Save Annotation
 
-Click "Save Annotation" to download the labeled data as a JSON file:
+Click "Save Annotation" to automatically save to `./data/manual/`:
 
+- ✓ File saved as `annotation_<type>_<timestamp>.json`
+- ✓ Success message shows the filename
+- ✓ Form auto-clears after 1.5 seconds for rapid batch annotation
+- ✓ Server terminal shows live save confirmations
+
+The saved JSON format:
 ```json
 {
   "html": "<div class='recipe'>...</div>",
@@ -98,6 +145,8 @@ Click "Save Annotation" to download the labeled data as a JSON file:
   "timestamp": "2025-12-17T10:30:00Z"
 }
 ```
+
+**Pro Tip**: Leave the extension popup open and keep annotating. Each save auto-clears the form so you can quickly select the next fragment.
 
 ## Schema Types
 
@@ -153,16 +202,23 @@ Review and correct all auto-extracted values before saving.
 
 ## Tips
 
-1. **Start with diverse examples**: Collect 5-10 examples per schema type
-2. **Include noise**: Select fragments with surrounding HTML (ads, navigation, etc.)
-3. **Verify JSON**: Make sure no "TODO" placeholders remain
-4. **Use keyboard shortcuts**: Press `Esc` to cancel selection mode
-5. **Batch annotation**: Keep the popup open and annotate multiple pages
+1. **Use domain loader for batch annotation**: Load DOMAIN_LIST.md and use "Open Next URL" to systematically go through all domains
+2. **Start with diverse examples**: Collect 5-10 examples per schema type
+3. **Include noise**: Select fragments with surrounding HTML (ads, navigation, etc.)
+4. **Verify JSON**: Make sure no "TODO" placeholders remain
+5. **Use keyboard shortcuts**: Press `Esc` to cancel selection mode
+6. **Batch annotation**: Keep the popup open and annotate multiple pages - the form auto-clears after each save
 
 ## Troubleshooting
 
+**"Server not running!" error?**
+- Start the server: `python annotation_server.py`
+- Make sure it's running on port 8000
+- Check server terminal for errors
+
 **Extension icon not showing?**
-- Make sure you created/added `icon.png` (128x128 PNG)
+- The icon was auto-generated during installation
+- If missing, reload the extension in `chrome://extensions/`
 
 **"Failed to start selection mode"?**
 - Some pages (chrome://, file://) are restricted
@@ -177,20 +233,26 @@ Review and correct all auto-extracted values before saving.
 - Ensure you've chosen a fragment type
 - Check JSON is valid (no syntax errors)
 
+**Annotations not appearing in `./data/manual/`?**
+- Check server terminal for errors
+- Verify server is running in `chrome-extension/` directory
+- Server saves relative to its own location: `../data/manual/`
+
 ## File Structure
 
 ```
 chrome-extension/
-├── manifest.json       # Extension configuration
-├── popup.html         # Extension UI
-├── popup.js           # UI logic
-├── content.js         # Page interaction script
-├── content.css        # Selection mode styles
-├── background.js      # Service worker
-├── styles.css         # Popup styles
-├── schemas.js         # Schema templates & extraction
-├── icon.png          # Extension icon (you need to add this)
-└── README.md         # This file
+├── manifest.json          # Extension configuration
+├── popup.html            # Extension UI
+├── popup.js              # UI logic
+├── content.js            # Page interaction script
+├── content.css           # Selection mode styles
+├── background.js         # Service worker
+├── styles.css            # Popup styles
+├── schemas.js            # Schema templates & extraction
+├── annotation_server.py  # Local server for saving annotations
+├── icon.png             # Extension icon (auto-generated)
+└── README.md            # This file
 ```
 
 ## Development
