@@ -6,6 +6,10 @@ let currentURL = '';
 let urlList = [];
 let currentUrlIndex = 0;
 
+// Annotation counts
+let annotationCounts = {};
+const TARGET_COUNT = 10; // Target number of annotations per category
+
 // DOM elements
 const loadUrlsBtn = document.getElementById('loadUrlsBtn');
 const openNextUrlBtn = document.getElementById('openNextUrlBtn');
@@ -18,6 +22,7 @@ const fragmentCount = document.getElementById('fragmentCount');
 const fragmentTypeSelect = document.getElementById('fragmentType');
 const jsonEditor = document.getElementById('jsonEditor');
 const validationMessage = document.getElementById('validationMessage');
+const fixJsonBtn = document.getElementById('fixJsonBtn');
 const saveBtn = document.getElementById('saveBtn');
 const clearBtn = document.getElementById('clearBtn');
 
@@ -28,11 +33,9 @@ selectFragmentBtn.addEventListener('click', handleSelectFragment);
 selectBodyBtn.addEventListener('click', handleSelectBody);
 fragmentTypeSelect.addEventListener('change', handleFragmentTypeChange);
 jsonEditor.addEventListener('input', handleJsonEdit);
+fixJsonBtn.addEventListener('click', handleFixJson);
 saveBtn.addEventListener('click', handleSave);
 clearBtn.addEventListener('click', handleClear);
-
-// Note: Message handling moved to background.js
-// The popup will restore state from chrome.storage when opened
 
 /**
  * Handle "Load URLs" button click
@@ -111,6 +114,62 @@ async function handleOpenNextUrl() {
 }
 
 /**
+ * Fetch annotation counts from server
+ */
+async function fetchCounts() {
+  try {
+    const response = await fetch('http://localhost:8000/counts');
+    const result = await response.json();
+
+    if (response.ok && result.success) {
+      annotationCounts = result.counts;
+      updateDropdownWithCounts();
+    } else {
+      console.warn('Failed to fetch counts:', result.error);
+    }
+  } catch (error) {
+    console.warn('Could not fetch counts (server may not be running):', error);
+  }
+}
+
+/**
+ * Update dropdown options with counts
+ */
+function updateDropdownWithCounts() {
+  const options = fragmentTypeSelect.querySelectorAll('option');
+
+  options.forEach(option => {
+    const fragmentType = option.value;
+
+    // Skip the placeholder option
+    if (!fragmentType) return;
+
+    // Get count for this type (default to 0 if not found)
+    const count = annotationCounts[fragmentType] || 0;
+
+    // Get the original label (without count)
+    let baseLabel = option.getAttribute('data-base-label');
+    if (!baseLabel) {
+      // Store original label on first run
+      baseLabel = option.textContent;
+      option.setAttribute('data-base-label', baseLabel);
+    }
+
+    // Update label with count and add checkmark if complete
+    const isComplete = count >= TARGET_COUNT;
+    const checkmark = isComplete ? '✓ ' : '';
+    option.textContent = `${checkmark}${baseLabel} (${count}/${TARGET_COUNT})`;
+
+    // Add CSS class for styling
+    if (isComplete) {
+      option.classList.add('complete');
+    } else {
+      option.classList.remove('complete');
+    }
+  });
+}
+
+/**
  * Handle "Select Fragment" button click
  */
 async function handleSelectFragment() {
@@ -126,9 +185,6 @@ async function handleSelectFragment() {
 
     // Send message to start selection
     chrome.tabs.sendMessage(tab.id, { action: 'startSelection' });
-
-    // Close popup (will reopen when user makes selection)
-    // window.close();
   } catch (error) {
     console.error('Error starting selection:', error);
     alert('Failed to start selection mode. Make sure you have permission to access this page.');
@@ -161,7 +217,6 @@ async function handleSelectBody() {
  * Display HTML in preview textarea
  */
 function displayHTML(html, count = 1) {
-  // Store full HTML but display truncated version if too long
   htmlPreview.value = html;
   updateCharCount(html.length);
 
@@ -239,6 +294,46 @@ function handleJsonEdit() {
   validateJSON();
   updateSaveButtonState();
   saveState();
+}
+
+/**
+ * Handle "Fix JSON" button click
+ */
+function handleFixJson() {
+  const jsonText = jsonEditor.value.trim();
+
+  if (!jsonText) {
+    showValidationWarning('⚠️ No JSON to fix. The editor is empty.');
+    return;
+  }
+
+  try {
+    // Use the jsonrepair library (loaded from jsonrepair.min.js)
+    // The library exports to window.JSONRepair object
+    if (typeof JSONRepair === 'undefined' || typeof JSONRepair.jsonrepair !== 'function') {
+      throw new Error('JSON repair library not loaded');
+    }
+
+    const fixed = JSONRepair.jsonrepair(jsonText);
+
+    // Try to parse and prettify the fixed JSON
+    const parsed = JSON.parse(fixed);
+    const prettified = JSON.stringify(parsed, null, 2);
+
+    // Update editor with fixed JSON
+    jsonEditor.value = prettified;
+
+    // Show success message
+    showValidationSuccess('✓ JSON fixed successfully!');
+
+    // Validate and update state
+    validateJSON();
+    updateSaveButtonState();
+    saveState();
+  } catch (error) {
+    // If repair failed, show error
+    showValidationError('✗ Could not fix JSON: ' + error.message);
+  }
 }
 
 /**
@@ -354,6 +449,9 @@ async function handleSave() {
       // Show success message with filename
       showValidationSuccess(`✓ Saved: ${result.filename}`);
 
+      // Refresh counts
+      await fetchCounts();
+
       // Auto-clear after 1.5 seconds
       setTimeout(() => {
         handleClear(true); // Pass true to skip confirmation
@@ -404,15 +502,12 @@ function saveState() {
   chrome.storage.local.get('popupState', (result) => {
     const state = result.popupState || {};
 
-    // Update state with current values
     state.currentHTML = currentHTML;
     state.currentURL = currentURL;
     state.urlList = urlList;
     state.currentUrlIndex = currentUrlIndex;
     state.fragmentType = fragmentTypeSelect.value;
     state.jsonEditorValue = jsonEditor.value;
-    // Preserve fragmentCount from previous state if it exists
-    // (it will be set by background.js when new selection is made)
 
     chrome.storage.local.set({ popupState: state });
   });
@@ -476,5 +571,6 @@ async function restoreState() {
 // Initialize on load
 document.addEventListener('DOMContentLoaded', async () => {
   await restoreState();
+  await fetchCounts();
   updateSaveButtonState();
 });

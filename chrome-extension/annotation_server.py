@@ -43,6 +43,11 @@ class ErrorResponse(BaseModel):
     error: str
 
 
+class CountsResponse(BaseModel):
+    success: bool
+    counts: dict[str, int]
+
+
 # FastAPI app
 app = FastAPI(title="HTML Fragment Annotation Server")
 
@@ -105,6 +110,45 @@ async def get_urls():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/counts", response_model=CountsResponse)
+async def get_counts():
+    """Get count of annotations by type"""
+    try:
+        # Initialize counts for all fragment types
+        counts = {
+            'recipe': 0,
+            'event': 0,
+            'pricing_table': 0,
+            'job_posting': 0,
+            'person': 0,
+            'error_page': 0,
+            'auth_required': 0,
+            'empty_shell': 0
+        }
+
+        # Count existing annotations in data/manual directory
+        save_dir = Path(__file__).parent.parent / 'data' / 'manual'
+
+        if save_dir.exists():
+            for filepath in save_dir.glob('annotation_*.json'):
+                try:
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        fragment_type = data.get('label', {}).get('type')
+                        if fragment_type in counts:
+                            counts[fragment_type] += 1
+                except Exception as e:
+                    print(f"Warning: Could not read {filepath.name}: {e}")
+                    continue
+
+        print(f"📊 Annotation counts: {counts}")
+        return CountsResponse(success=True, counts=counts)
+
+    except Exception as e:
+        print(f"✗ Error counting annotations: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/save", response_model=SaveResponse)
 async def save_annotation(annotation: Annotation):
     """Save annotation to data/manual directory"""
@@ -144,6 +188,7 @@ async def root():
         "message": "HTML Fragment Annotation Server",
         "endpoints": {
             "/urls": "GET - Fetch URL list",
+            "/counts": "GET - Get annotation counts by type",
             "/save": "POST - Save annotation"
         }
     }
@@ -160,8 +205,9 @@ def main():
     print("Saving to: ../data/manual/")
     print()
     print("Endpoints:")
-    print("  GET  /urls  - Fetch URL list")
-    print("  POST /save  - Save annotation")
+    print("  GET  /urls   - Fetch URL list")
+    print("  GET  /counts - Get annotation counts by type")
+    print("  POST /save   - Save annotation")
     print()
     print("Instructions:")
     print("1. Keep this server running")

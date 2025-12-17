@@ -8,8 +8,10 @@ A Chrome extension for manually annotating HTML fragments with structured JSON l
 - 🎯 **Multi-Fragment Selection**: Select multiple HTML elements from a page and combine them
 - 📄 **Full Page Capture**: Capture entire `<body>` HTML
 - 🏷️ **Schema Templates**: Pre-defined templates for recipe, event, job, person, pricing, and negative examples
+- 📊 **Progress Tracking**: Real-time count display showing progress toward target (e.g., "Recipe (3/10)")
 - 🤖 **Auto-Extraction**: Basic field pre-population from HTML structure
 - ✓ **JSON Validation**: Real-time validation with error messages
+- 🔧 **JSON Fixer**: Built-in one-click JSON repair for common errors (quotes, commas, trailing commas, etc.)
 - 💾 **Auto-Save**: Automatically saves to `./data/manual/` via local server
 - 🔄 **Auto-Clear**: Clears form after successful save for rapid batch annotation
 - 💾 **State Persistence**: Keeps your selections even when popup loses focus
@@ -41,8 +43,9 @@ Listening on: http://localhost:8000
 Saving to: ../data/manual/
 
 Endpoints:
-  GET  /urls  - Fetch URL list
-  POST /save  - Save annotation
+  GET  /urls   - Fetch URL list
+  GET  /counts - Get annotation counts by type
+  POST /save   - Save annotation
 ```
 
 **Keep this server running** while using the extension.
@@ -100,19 +103,21 @@ Click the extension icon in your Chrome toolbar to open the popup.
 
 ### Step 4: Choose Fragment Type
 
-Select the appropriate fragment type from the dropdown:
+Select the appropriate fragment type from the dropdown. Each category shows your progress toward the target count of 10:
 
 **Positive Examples:**
-- Recipe
-- Event
-- Pricing Table
-- Job Posting
-- Person/Contact
+- Recipe (3/10)
+- Event (0/10)
+- Pricing Table (1/10)
+- Job Posting (7/10)
+- Person/Contact (0/10)
 
 **Negative Examples:**
-- Error Page
-- Auth Required
-- Empty SPA Shell
+- Error Page (2/10)
+- Auth Required (0/10)
+- Empty SPA Shell (1/10)
+
+Categories that reach 10 annotations are marked with a green checkmark: ✓ Recipe (10/10)
 
 ### Step 5: Review & Edit JSON
 
@@ -121,6 +126,14 @@ The JSON editor will auto-populate with:
 - Basic extracted fields (titles, prices, dates, etc.)
 
 Review and edit the JSON to accurately represent the HTML content. Replace any "TODO" placeholders with actual values.
+
+**💡 JSON Errors?** Click the **🔧 Fix JSON** button to automatically repair common issues:
+- Missing or incorrect quotes around keys
+- Single quotes → double quotes
+- Trailing commas
+- Missing commas between elements
+- Python constants (None, True, False) → JSON equivalents
+- Comments and other formatting issues
 
 ### Step 6: Save Annotation
 
@@ -202,12 +215,13 @@ Review and correct all auto-extracted values before saving.
 
 ## Tips
 
-1. **Use domain loader for batch annotation**: Load DOMAIN_LIST.md and use "Open Next URL" to systematically go through all domains
-2. **Start with diverse examples**: Collect 5-10 examples per schema type
-3. **Include noise**: Select fragments with surrounding HTML (ads, navigation, etc.)
-4. **Verify JSON**: Make sure no "TODO" placeholders remain
+1. **Track your progress**: Each category shows real-time counts (e.g., "Recipe (3/10)"). Aim for 10 annotations per category.
+2. **Use domain loader for batch annotation**: Load DOMAIN_LIST.md and use "Open Next URL" to systematically go through all domains
+3. **Start with diverse examples**: Collect 5-10 examples per schema type
+4. **Include noise**: Select fragments with surrounding HTML (ads, navigation, etc.)
 5. **Use keyboard shortcuts**: Press `Esc` to cancel selection mode
 6. **Batch annotation**: Keep the popup open and annotate multiple pages - the form auto-clears after each save
+7. **Focus on incomplete categories**: Categories with checkmarks (✓) have reached the target count
 
 ## Troubleshooting
 
@@ -231,7 +245,12 @@ Review and correct all auto-extracted values before saving.
 **Save button disabled?**
 - Ensure you've selected HTML
 - Ensure you've chosen a fragment type
-- Check JSON is valid (no syntax errors)
+- Check JSON is valid (no syntax errors) - use the 🔧 Fix JSON button if needed
+
+**JSON syntax errors?**
+- Click the **🔧 Fix JSON** button next to the "JSON Label" heading
+- The extension will automatically repair common JSON issues
+- If automatic repair doesn't work, manually correct the JSON syntax
 
 **Annotations not appearing in `./data/manual/`?**
 - Check server terminal for errors
