@@ -14,16 +14,21 @@ class AnnotationLabeler:
     def __init__(self):
         self.project_root = Path(__file__).parent.parent
         self.candidates_dir = self.project_root / "data" / "seeds" / "candidates"
+        self.negatives_dir = self.project_root / "data" / "seeds" / "negatives"
 
         # Initialize session state
         if "current_idx" not in st.session_state:
             st.session_state.current_idx = 0
         if "files" not in st.session_state:
             st.session_state.files = self._load_annotation_files()
+        if "filter_directory" not in st.session_state:
+            st.session_state.filter_directory = "all"
 
     def _load_annotation_files(self):
-        """Load all annotation files from candidates directory."""
+        """Load all annotation files from both candidates and negatives directories."""
         files = []
+
+        # Load from candidates directory
         for annotation_path in sorted(self.candidates_dir.glob("*_annotation.json")):
             fragment_id = annotation_path.stem.replace("_annotation", "")
             html_path = annotation_path.parent / f"{fragment_id}.html"
@@ -36,8 +41,27 @@ class AnnotationLabeler:
                         "html_path": html_path,
                         "metadata_path": metadata_path,
                         "fragment_id": fragment_id,
+                        "source_dir": "candidates",
                     }
                 )
+
+        # Load from negatives directory
+        for annotation_path in sorted(self.negatives_dir.glob("*_annotation.json")):
+            fragment_id = annotation_path.stem.replace("_annotation", "")
+            html_path = annotation_path.parent / f"{fragment_id}.html"
+            metadata_path = annotation_path.parent / f"{fragment_id}.json"
+
+            if html_path.exists() and metadata_path.exists():
+                files.append(
+                    {
+                        "annotation_path": annotation_path,
+                        "html_path": html_path,
+                        "metadata_path": metadata_path,
+                        "fragment_id": fragment_id,
+                        "source_dir": "negatives",
+                    }
+                )
+
         return files
 
     def _has_todos(self, data):
@@ -45,11 +69,55 @@ class AnnotationLabeler:
         json_str = json.dumps(data)
         return "TODO" in json_str
 
+    def _get_filtered_files(self):
+        """Get files filtered by selected directory."""
+        filter_dir = st.session_state.filter_directory
+        if filter_dir == "all":
+            return st.session_state.files
+        else:
+            return [f for f in st.session_state.files if f["source_dir"] == filter_dir]
+
+    def _get_annotation_type(self, file_info):
+        """Get the type field from an annotation file."""
+        try:
+            with open(file_info["annotation_path"]) as f:
+                data = json.load(f)
+                return data.get("type", "unknown")
+        except Exception:
+            return "unknown"
+
+    def _find_next_category(self, filtered_files, current_idx):
+        """Find the next annotation with a different category/type."""
+        if not filtered_files or current_idx >= len(filtered_files):
+            return current_idx
+
+        current_type = self._get_annotation_type(filtered_files[current_idx])
+
+        # Search forward from current position
+        for i in range(current_idx + 1, len(filtered_files)):
+            if self._get_annotation_type(filtered_files[i]) != current_type:
+                return i
+
+        # If no different type found ahead, wrap around
+        for i in range(0, current_idx):
+            if self._get_annotation_type(filtered_files[i]) != current_type:
+                return i
+
+        # If all same type, stay at current
+        return current_idx
+
     def _count_stats(self):
         """Count annotation statistics."""
-        stats = {"total": len(st.session_state.files), "completed": 0, "incomplete": 0}
+        filtered_files = self._get_filtered_files()
+        stats = {
+            "total": len(filtered_files),
+            "completed": 0,
+            "incomplete": 0,
+            "candidates": len([f for f in st.session_state.files if f["source_dir"] == "candidates"]),
+            "negatives": len([f for f in st.session_state.files if f["source_dir"] == "negatives"]),
+        }
 
-        for file_info in st.session_state.files:
+        for file_info in filtered_files:
             with open(file_info["annotation_path"]) as f:
                 data = json.load(f)
                 if self._has_todos(data):
@@ -331,11 +399,42 @@ class AnnotationLabeler:
             "helpful_count": helpful_count if helpful_count > 0 else None,
         }
 
+    def _render_generic_form(self, data, fragment_id):
+        """Render form for generic/negative examples (read-only with edit capability)."""
+        fragment_type = data.get("type", "unknown")
+        st.subheader(f"Generic Annotation: {fragment_type}")
+
+        st.info("This is a negative example or unsupported type. You can view and edit the raw JSON below.")
+
+        # Show current JSON for editing
+        json_str = json.dumps(data, indent=2)
+        edited_json = st.text_area(
+            "Annotation JSON",
+            value=json_str,
+            height=400,
+            key=f"{fragment_id}_json",
+            help="Edit the JSON directly. Make sure it's valid JSON.",
+        )
+
+        # Try to parse the edited JSON
+        try:
+            parsed_data = json.loads(edited_json)
+            st.success("✓ Valid JSON")
+            return parsed_data
+        except json.JSONDecodeError as e:
+            st.error(f"✗ Invalid JSON: {e}")
+            return data
+
     def _validate_annotation(self, annotation_data):
         """Validate annotation against schema."""
         fragment_type = annotation_data.get("type")
+
+        # For generic/unsupported types, just check if it's valid JSON and has a type
         if not fragment_type or fragment_type not in SCHEMA_REGISTRY:
-            return False, f"Unknown fragment type: {fragment_type}"
+            if not fragment_type:
+                return False, "Missing 'type' field in annotation"
+            # Generic types don't need schema validation
+            return True, f"Generic annotation (type: {fragment_type}) - no schema validation required"
 
         schema_class = SCHEMA_REGISTRY[fragment_type]
         try:
@@ -359,21 +458,10 @@ class AnnotationLabeler:
 
         # Stats in sidebar
         with st.sidebar:
-            st.header("Progress")
-            stats = self._count_stats()
-            st.metric("Total Annotations", stats["total"])
-            st.metric("Completed", stats["completed"])
-            st.metric("Incomplete", stats["incomplete"])
-
-            if stats["total"] > 0:
-                progress = stats["completed"] / stats["total"]
-                st.progress(progress)
-                st.caption(f"{progress * 100:.1f}% complete")
-
-            st.divider()
-
             # Navigation
             st.header("Navigation")
+            filtered_files = self._get_filtered_files()
+
             if st.button("⏮️ First"):
                 st.session_state.current_idx = 0
                 st.rerun()
@@ -382,14 +470,19 @@ class AnnotationLabeler:
                 st.session_state.current_idx = max(0, st.session_state.current_idx - 1)
                 st.rerun()
 
-            st.markdown(f"**{st.session_state.current_idx + 1}** / {len(st.session_state.files)}")
+            st.markdown(f"**{st.session_state.current_idx + 1}** / {len(filtered_files)}")
 
             if st.button("⏩ Next"):
-                st.session_state.current_idx = min(len(st.session_state.files) - 1, st.session_state.current_idx + 1)
+                st.session_state.current_idx = min(len(filtered_files) - 1, st.session_state.current_idx + 1)
                 st.rerun()
 
             if st.button("⏭️ Last"):
-                st.session_state.current_idx = len(st.session_state.files) - 1
+                st.session_state.current_idx = len(filtered_files) - 1
+                st.rerun()
+
+            if st.button("🔀 Next Category"):
+                next_idx = self._find_next_category(filtered_files, st.session_state.current_idx)
+                st.session_state.current_idx = next_idx
                 st.rerun()
 
             st.divider()
@@ -398,20 +491,60 @@ class AnnotationLabeler:
             st.header("Jump to")
             selected_idx = st.selectbox(
                 "Select annotation",
-                range(len(st.session_state.files)),
+                range(len(filtered_files)),
                 index=st.session_state.current_idx,
-                format_func=lambda i: f"{i + 1}. {st.session_state.files[i]['fragment_id']}",
+                format_func=lambda i: f"{i + 1}. {filtered_files[i]['fragment_id']} ({filtered_files[i]['source_dir']})",  # noqa: E501
             )
             if selected_idx != st.session_state.current_idx:
                 st.session_state.current_idx = selected_idx
                 st.rerun()
 
+            st.divider()
+
+            st.header("Directory Filter")
+            filter_options = {"all": "All", "candidates": "Candidates", "negatives": "Negatives"}
+            selected_filter = st.radio(
+                "Show annotations from:",
+                options=list(filter_options.keys()),
+                format_func=lambda x: filter_options[x],
+                index=list(filter_options.keys()).index(st.session_state.filter_directory),
+            )
+
+            if selected_filter != st.session_state.filter_directory:
+                st.session_state.filter_directory = selected_filter
+                st.session_state.current_idx = 0
+                st.rerun()
+
+            st.divider()
+
+            st.header("Progress")
+            stats = self._count_stats()
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Total", stats["total"])
+            with col2:
+                st.metric("Completed", stats["completed"])
+
+            st.metric("Incomplete", stats["incomplete"])
+
+            with st.expander("Directory Breakdown"):
+                st.write(f"📂 Candidates: {stats['candidates']}")
+                st.write(f"📂 Negatives: {stats['negatives']}")
+
+            if stats["total"] > 0:
+                progress = stats["completed"] / stats["total"]
+                st.progress(progress)
+                st.caption(f"{progress * 100:.1f}% complete")
+
         # Main content
-        if not st.session_state.files:
-            st.warning("No annotation files found in data/seeds/candidates/")
+        filtered_files = self._get_filtered_files()
+
+        if not filtered_files:
+            st.warning("No annotation files found in selected directory.")
             return
 
-        current_file = st.session_state.files[st.session_state.current_idx]
+        current_file = filtered_files[st.session_state.current_idx]
 
         # Load current data
         with open(current_file["annotation_path"]) as f:
@@ -424,12 +557,22 @@ class AnnotationLabeler:
             html_content = f.read()
 
         # Display metadata
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.markdown(f"**Fragment ID:** `{metadata['fragment_id']}`")
         with col2:
-            st.markdown(f"**Type:** `{metadata['fragment_type']}`")
+            # Handle different metadata formats (candidates vs negatives)
+            if "fragment_type" in metadata:
+                fragment_type_display = metadata["fragment_type"]
+            elif "negative_type" in metadata:
+                fragment_type_display = f"{metadata.get('expected_type', 'unknown')} → {metadata['negative_type']}"
+            else:
+                fragment_type_display = annotation_data.get("type", "unknown")
+            st.markdown(f"**Type:** `{fragment_type_display}`")
         with col3:
+            source_dir_emoji = "📂" if current_file["source_dir"] == "candidates" else "🗑️"
+            st.markdown(f"**Directory:** {source_dir_emoji} `{current_file['source_dir']}`")
+        with col4:
             has_todos = self._has_todos(annotation_data)
             status = "❌ Incomplete" if has_todos else "✅ Complete"
             st.markdown(f"**Status:** {status}")
@@ -458,13 +601,12 @@ class AnnotationLabeler:
             elif fragment_type == "review":
                 updated_annotation = self._render_review_form(annotation_data, fragment_id)
             else:
-                st.error(f"Unsupported fragment type: {fragment_type}")
-                st.json(annotation_data)
-                return
+                # Use generic form for unsupported types (negatives, etc.)
+                updated_annotation = self._render_generic_form(annotation_data, fragment_id)
 
             # Validate button
             st.divider()
-            col1, col2 = st.columns(2)
+            col1, col2, col3 = st.columns(3)
 
             with col1:
                 if st.button("💾 Save", type="primary", use_container_width=True):
@@ -487,6 +629,28 @@ class AnnotationLabeler:
                         st.success(f"✅ {message}")
                     else:
                         st.error(f"❌ {message}")
+
+            with col3:
+                if st.button("🗑️ Delete", type="secondary", use_container_width=True):
+                    # Delete all associated files
+                    try:
+                        current_file["annotation_path"].unlink()
+                        current_file["html_path"].unlink()
+                        current_file["metadata_path"].unlink()
+
+                        # Remove from session state
+                        st.session_state.files = [f for f in st.session_state.files
+                                                 if f["fragment_id"] != current_file["fragment_id"]]
+
+                        # Stay at current index (which will show the next item)
+                        # Only adjust if we deleted the last item
+                        if st.session_state.current_idx >= len(st.session_state.files):
+                            st.session_state.current_idx = max(0, len(st.session_state.files) - 1)
+
+                        st.success("✅ Example deleted successfully!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error deleting files: {e}")
 
             # Show current annotation JSON
             with st.expander("View Current Annotation JSON"):
