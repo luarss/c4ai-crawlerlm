@@ -58,26 +58,50 @@ app.add_middleware(
 
 @app.get("/urls", response_model=URLListResponse)
 async def get_urls():
-    """Get list of URLs from selected_url_list.txt"""
+    """Get list of domains from DOMAIN_LIST.md"""
     try:
-        # Read URL list from data/selected_url_list.txt
-        url_file = Path(__file__).parent.parent / 'data' / 'selected_url_list.txt'
+        # Read domain list from DOMAIN_LIST.md
+        domain_file = Path(__file__).parent.parent / 'DOMAIN_LIST.md'
 
-        if not url_file.exists():
-            raise HTTPException(status_code=404, detail="selected_url_list.txt not found")
+        if not domain_file.exists():
+            raise HTTPException(status_code=404, detail="DOMAIN_LIST.md not found")
 
-        # Read URLs (skip empty lines)
-        with open(url_file, 'r', encoding='utf-8') as f:
-            urls = [line.strip() for line in f if line.strip()]
+        # Parse markdown to extract domains
+        domains = []
+        with open(domain_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                # Skip empty lines, headers, and comments
+                if not line or line.startswith('#') or line.startswith('**Note'):
+                    continue
+                # Extract domains from markdown list items
+                if line.startswith('-'):
+                    # Format: "- **domain.com** - Description" or "- domain.com - Description"
+                    parts = line.split('**')
+                    if len(parts) >= 3:
+                        # Extract from bold markdown
+                        domain = parts[1].strip()
+                    else:
+                        # Extract from plain text after dash
+                        domain = line.split('-', 1)[1].strip().split()[0]
 
-        print(f"📋 Loaded {len(urls)} URLs from selected_url_list.txt")
+                    # Clean domain (remove trailing slashes, paths, etc.)
+                    domain = domain.split('/')[0].strip()
 
-        return URLListResponse(success=True, urls=urls, count=len(urls))
+                    if domain and '.' in domain:
+                        # Add https:// prefix
+                        url = f"https://{domain}"
+                        if url not in domains:
+                            domains.append(url)
+
+        print(f"📋 Loaded {len(domains)} domains from DOMAIN_LIST.md")
+
+        return URLListResponse(success=True, urls=domains, count=len(domains))
 
     except HTTPException:
         raise
     except Exception as e:
-        print(f"✗ Error loading URLs: {e}")
+        print(f"✗ Error loading domains: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -148,7 +172,12 @@ def main():
     print("=" * 60)
     print()
 
-    uvicorn.run(app, host="localhost", port=8000)
+    uvicorn.run(
+        "annotation_server:app",
+        host="localhost",
+        port=8000,
+        reload=True
+    )
 
 
 if __name__ == '__main__':
