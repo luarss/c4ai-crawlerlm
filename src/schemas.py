@@ -321,6 +321,32 @@ ANNOTATION_TEMPLATES = {
         "linkedin": "TODO",
         "image_url": "TODO",
     },
+    "auth_required": {
+        "type": "auth_required",
+        "message": "TODO: Extract the main authentication message",
+    },
+    "error_page": {
+        "type": "error_page",
+        "error_code": "TODO: Extract error code (e.g., 404, 500)",
+        "message": "TODO: Extract error message",
+        "description": "TODO: Extract error description",
+    },
+    "empty_spa_shell": {
+        "type": "empty_spa_shell",
+        "message": "TODO: Describe why content is unavailable (e.g., requires JavaScript)",
+    },
+    "captcha_or_bot_check": {
+        "type": "captcha_or_bot_check",
+        "message": "TODO: Extract captcha/bot check message",
+    },
+    "paywall_content": {
+        "type": "paywall_content",
+        "message": "TODO: Extract paywall message",
+    },
+    "negative": {
+        "type": "negative",
+        "message": "TODO: Describe why this is a negative example",
+    },
 }
 
 
