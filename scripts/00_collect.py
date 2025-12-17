@@ -322,48 +322,92 @@ class FragmentCollector:
                     "max_pages": 10,
                 },
             ],
-            "error_page": [
-                # Various domains to collect diverse error pages
-                # Using likely-404 paths to trigger error pages
+            "errorpage": [
+                # Crawl sites to find naturally occurring error pages
+                # This captures real 404s, 410s, deleted content, moved pages, etc.
                 {
-                    "domain": "github.com",
-                    "pattern": "*/nonexistent-*",
-                    "max_urls": 10,
+                    "seed_url": "https://github.com",
+                    "max_pages": 20,
+                    "url_patterns": None,  # Crawl all pages to find broken links
                 },
                 {
-                    "domain": "stackoverflow.com",
-                    "pattern": "*/questions/99999999/*",
-                    "max_urls": 10,
+                    "seed_url": "https://stackoverflow.com",
+                    "max_pages": 20,
+                    "url_patterns": None,
                 },
                 {
-                    "domain": "reddit.com",
-                    "pattern": "*/r/nonexistent*",
-                    "max_urls": 10,
+                    "seed_url": "https://www.reddit.com",
+                    "max_pages": 20,
+                    "url_patterns": None,
                 },
                 {
-                    "domain": "medium.com",
-                    "pattern": "*/deleted-*",
-                    "max_urls": 10,
+                    "seed_url": "https://medium.com",
+                    "max_pages": 20,
+                    "url_patterns": None,
                 },
                 {
-                    "domain": "twitter.com",
-                    "pattern": "*/status/999999999*",
-                    "max_urls": 10,
+                    "seed_url": "https://twitter.com",
+                    "max_pages": 20,
+                    "url_patterns": None,
                 },
                 {
-                    "domain": "youtube.com",
-                    "pattern": "*/watch?v=deleted*",
-                    "max_urls": 10,
+                    "seed_url": "https://www.youtube.com",
+                    "max_pages": 20,
+                    "url_patterns": None,
                 },
                 {
-                    "domain": "amazon.com",
-                    "pattern": "*/dp/INVALID*",
-                    "max_urls": 10,
+                    "seed_url": "https://www.amazon.com",
+                    "max_pages": 20,
+                    "url_patterns": None,
                 },
                 {
-                    "domain": "stripe.com",
-                    "pattern": "*/docs/nonexistent*",
-                    "max_urls": 10,
+                    "seed_url": "https://stripe.com",
+                    "max_pages": 20,
+                    "url_patterns": None,
+                },
+                {
+                    "seed_url": "https://www.linkedin.com",
+                    "max_pages": 20,
+                    "url_patterns": None,
+                },
+            ],
+            "captcha_or_bot_check": [
+                # Intentionally trigger rate limits/bot checks by rapid requests
+                # These sites commonly use Cloudflare, DataDome, or similar protection
+                {
+                    "seed_url": "https://www.ticketmaster.com",
+                    "max_pages": 15,
+                    "url_patterns": None,  # No filter - explore all pages to trigger captcha
+                },
+                {
+                    "seed_url": "https://www.stubhub.com",
+                    "max_pages": 15,
+                    "url_patterns": None,
+                },
+                {
+                    "seed_url": "https://www.seatgeek.com",
+                    "max_pages": 15,
+                    "url_patterns": None,
+                },
+                {
+                    "seed_url": "https://www.zillow.com",
+                    "max_pages": 15,
+                    "url_patterns": ["*/homedetails/*", "*/b/*"],  # Browse listings to trigger limits
+                },
+                {
+                    "seed_url": "https://www.redfin.com",
+                    "max_pages": 15,
+                    "url_patterns": ["*/home/*", "*/city/*"],  # Browse properties
+                },
+                {
+                    "seed_url": "https://www.bestbuy.com",
+                    "max_pages": 15,
+                    "url_patterns": ["*/site/*", "*/products/*"],  # Browse products
+                },
+                {
+                    "seed_url": "https://www.target.com",
+                    "max_pages": 15,
+                    "url_patterns": ["*/p/*", "*/c/*"],  # Browse products
                 },
             ],
         }
@@ -888,11 +932,16 @@ class FragmentCollector:
         """
         seed_url = config["seed_url"]
         max_pages = config.get("max_pages", 10)
+        url_patterns = config.get("url_patterns")
 
         print(f"\n🔍 Deep crawling: {seed_url}")
         print(f"   Max pages: {max_pages}")
+        if url_patterns:
+            print(f"   URL patterns: {', '.join(url_patterns)}")
 
-        # Configure URL filters for authrequired
+        # Configure URL filters
+        # For authrequired/paywall: use hardcoded patterns (working well)
+        # For new types: use configurable patterns from config
         if fragment_type == "authrequired":
             # Match login/signin/auth URLs
             filter_chain = FilterChain(
@@ -923,16 +972,27 @@ class FragmentCollector:
                     )
                 ]
             )
+        elif url_patterns:
+            # Use configurable patterns for new types (captcha_or_bot_check, etc.)
+            filter_chain = FilterChain([URLPatternFilter(patterns=url_patterns)])
         else:
             filter_chain = None
 
         # Configure deep crawling strategy
-        deep_crawl_strategy = BFSDeepCrawlStrategy(
-            max_depth=2,
-            max_pages=max_pages,
-            include_external=False,
-            filter_chain=filter_chain,
-        )
+        if filter_chain:
+            deep_crawl_strategy = BFSDeepCrawlStrategy(
+                max_depth=2,
+                max_pages=max_pages,
+                include_external=False,
+                filter_chain=filter_chain,
+            )
+        else:
+            # No filter - crawl all pages
+            deep_crawl_strategy = BFSDeepCrawlStrategy(
+                max_depth=2,
+                max_pages=max_pages,
+                include_external=False,
+            )
 
         crawl_config = CrawlerRunConfig(
             deep_crawl_strategy=deep_crawl_strategy,
@@ -1007,12 +1067,16 @@ class FragmentCollector:
             print(f"\n📦 Processing {fragment_type.upper()} fragments...")
             print("=" * 70)
 
-            # Check if this type uses deep crawling
+            # Check collection method for this type
             domain_configs = self.domain_configs.get(fragment_type, [])
-            uses_deep_crawl = domain_configs and "seed_url" in domain_configs[0]
+            if not domain_configs:
+                continue
+
+            # Determine collection method based on config structure
+            uses_deep_crawl = "seed_url" in domain_configs[0]
 
             if uses_deep_crawl:
-                # Use deep crawling for negative types (auth_required, paywall_content)
+                # Use deep crawling for negative types (authrequired, errorpage, captcha, etc.)
                 print(f"🔍 Using deep crawling from {len(domain_configs)} seed URLs...")
                 print("-" * 70)
 
@@ -1035,6 +1099,7 @@ class FragmentCollector:
             for domain, urls in discovered_urls.items():
                 print(f"\n🌐 Processing {len(urls)} URLs from {domain}")
 
+                # TODO: parallelise fetch and process page
                 for url in urls:
                     print(f"\n  Fetching: {url}")
 
@@ -1327,9 +1392,10 @@ Examples:
             "paywall_content",
             "spa_heavy",
             "authrequired",
-            "error_page",
+            "errorpage",
+            "captcha_or_bot_check",
         ],
-        help="Categories to collect (default: all). Includes negative collectors: paywall_content, spa_heavy, authrequired, error_page",  # noqa: E501
+        help="Categories to collect (default: all). Includes negative collectors: paywall_content, spa_heavy, authrequired, errorpage, captcha_or_bot_check",  # noqa: E501
     )
 
     args = parser.parse_args()
