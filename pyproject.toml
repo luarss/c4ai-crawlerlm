@@ -25,6 +25,8 @@ dev = [
     "huggingface-hub>=0.36.0",
     "datasets>=4.4.1",
     "ruff>=0.14.8",
+    "fastapi>=0.124.4",
+    "uvicorn>=0.34.0",
 ]
 
 [tool.ruff]
