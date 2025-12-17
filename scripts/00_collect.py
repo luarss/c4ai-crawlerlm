@@ -8,10 +8,7 @@ from pathlib import Path
 from bs4 import BeautifulSoup
 from crawl4ai import AsyncUrlSeeder, AsyncWebCrawler, SeedingConfig
 
-from src.schemas import (
-    ProductSchema,
-    RecipeSchema,
-)
+from src.schemas import get_schema
 
 
 class FragmentCollector:
@@ -318,398 +315,69 @@ class FragmentCollector:
 
     def validate_fragment(self, fragment_html: str, fragment_type: str) -> dict:
         """
-        Validate that fragment contains content matching schema fields.
+        Validate fragment by counting percentage of schema pattern matches.
 
         Returns dict with:
-        - is_valid: bool
-        - score: float (0-1)
-        - found_fields: list of fields found
-        - missing_fields: list of required fields missing
+        - is_valid: bool (True if score >= 0.3)
+        - score: float (0-1) - percentage of validation patterns that matched
+        - matched_patterns: list of patterns that matched
+        - total_patterns: int - total patterns checked
         - reason: str explanation
         """
         soup = BeautifulSoup(fragment_html, "html.parser")
         text = soup.get_text(separator="\n", strip=True)
 
-        if fragment_type == "recipe":
-            return self._validate_recipe(soup, text)
-        elif fragment_type == "product":
-            return self._validate_product(soup, text)
-        elif fragment_type == "event":
-            return self._validate_event(soup, text)
-        elif fragment_type == "pricing_table":
-            return self._validate_pricing_table(soup, text)
-        elif fragment_type == "job_posting":
-            return self._validate_job_posting(soup, text)
-        elif fragment_type == "person":
-            return self._validate_person(soup, text)
-        else:
+        # Get validation patterns from schema registry
+        try:
+            schema = get_schema(fragment_type)
+        except ValueError:
             return {
                 "is_valid": True,
                 "score": 0.5,
-                "found_fields": [],
-                "missing_fields": [],
-                "reason": "Unknown type, accepting by default",
+                "matched_patterns": [],
+                "total_patterns": 0,
+                "reason": f"Unknown fragment type: {fragment_type}",
             }
 
-    def _validate_recipe(self, soup: BeautifulSoup, text: str) -> dict:
-        """Validate recipe fragment has ingredients, instructions, etc using schema patterns."""
-        found_fields = []
-        missing_fields = []
-        score = 0.0
+        if not hasattr(schema, "VALIDATION_PATTERNS"):
+            return {
+                "is_valid": True,
+                "score": 0.5,
+                "matched_patterns": [],
+                "total_patterns": 0,
+                "reason": "No validation patterns defined",
+            }
 
-        # Use patterns from RecipeSchema
-        validation_patterns = RecipeSchema.VALIDATION_PATTERNS
+        patterns = schema.VALIDATION_PATTERNS
+        matched_patterns = []
 
-        # Check for recipe name/title (required)
-        if soup.find(["h1", "h2"]) or re.search(r"recipe", text, re.IGNORECASE):
-            found_fields.append("name")
-            score += 0.2
-        else:
-            missing_fields.append("name")
+        # Count how many patterns match
+        for pattern in patterns:
+            try:
+                if re.search(pattern, text, re.IGNORECASE):
+                    matched_patterns.append(pattern)
+            except re.error:
+                # Skip invalid patterns
+                continue
 
-        # Check for ingredients list (required) - look for measurement patterns from schema
-        list_items = soup.find_all("li")
-        ingredient_patterns = [
-            p for p in validation_patterns if any(x in p for x in ["cup", "tablespoon", "gram", "/"])
-        ]
+        # Calculate quality score as percentage of patterns matched
+        total_patterns = len(patterns)
+        score = len(matched_patterns) / total_patterns if total_patterns > 0 else 0.0
 
-        potential_ingredients = []
-        for li in list_items:
-            li_text = li.get_text(strip=True)
-            if any(re.search(pattern, li_text, re.IGNORECASE) for pattern in ingredient_patterns):
-                potential_ingredients.append(li_text)
-
-        if len(potential_ingredients) >= 3:
-            found_fields.append("ingredients")
-            score += 0.3
-        else:
-            missing_fields.append("ingredients (need 3+)")
-
-        # Check for instructions/steps (required) - use cooking verb patterns from schema
-        ordered_lists = soup.find_all("ol")
-        instruction_pattern = next((p for p in validation_patterns if "preheat" in p), None)
-
-        potential_instructions = []
-        if ordered_lists:
-            for ol in ordered_lists:
-                steps = [li.get_text(strip=True) for li in ol.find_all("li")]
-                potential_instructions.extend(steps)
-        else:
-            # Check for paragraph-based instructions using cooking verbs
-            paragraphs = soup.find_all("p")
-            for p in paragraphs:
-                p_text = p.get_text(strip=True)
-                if instruction_pattern and re.search(instruction_pattern, p_text, re.IGNORECASE):
-                    potential_instructions.append(p_text)
-
-        if len(potential_instructions) >= 3:
-            found_fields.append("instructions")
-            score += 0.3
-        else:
-            missing_fields.append("instructions (need 3+)")
-
-        # Check for timing info (optional) - use timing pattern from schema
-        time_pattern = next((p for p in validation_patterns if "min|minute" in p), None)
-        if time_pattern and re.search(time_pattern, text, re.IGNORECASE):
-            found_fields.append("timing_info")
-            score += 0.1
-
-        # Check for servings (optional) - use servings pattern from schema
-        servings_pattern = next((p for p in validation_patterns if "serves" in p), None)
-        if servings_pattern and re.search(servings_pattern, text, re.IGNORECASE):
-            found_fields.append("servings")
-            score += 0.1
-
-        # Threshold: need at least name + ingredients + instructions
-        is_valid = "name" in found_fields and "ingredients" in found_fields and "instructions" in found_fields
+        # Simple threshold: valid if at least 30% of patterns match
+        is_valid = score >= 0.3
 
         reason = (
-            f"Found {len(found_fields)} fields: {', '.join(found_fields)}"
+            f"Matched {len(matched_patterns)}/{total_patterns} patterns ({score:.1%})"
             if is_valid
-            else f"Missing required fields: {', '.join(missing_fields)}"
+            else f"Only {len(matched_patterns)}/{total_patterns} patterns matched ({score:.1%}) - need 30%+"
         )
 
         return {
             "is_valid": is_valid,
-            "score": min(score, 1.0),
-            "found_fields": found_fields,
-            "missing_fields": missing_fields,
-            "reason": reason,
-        }
-
-    def _validate_product(self, soup: BeautifulSoup, text: str) -> dict:
-        """Validate product fragment has name, price, description, etc using schema patterns."""
-        found_fields = []
-        missing_fields = []
-        score = 0.0
-
-        # Use patterns from ProductSchema
-        validation_patterns = ProductSchema.VALIDATION_PATTERNS
-
-        # Check for product name (required)
-        if soup.find(["h1", "h2"]) or re.search(r"product", text, re.IGNORECASE):
-            found_fields.append("name")
-            score += 0.3
-        else:
-            missing_fields.append("name")
-
-        # Check for price (required) - use schema patterns
-        price_patterns = [p for p in validation_patterns if "$" in p or "USD" in p or "price" in p.lower()]
-        if any(re.search(pattern, text, re.IGNORECASE) for pattern in price_patterns):
-            found_fields.append("price")
-            score += 0.4
-        else:
-            missing_fields.append("price")
-
-        # Check for description (optional but important)
-        paragraphs = soup.find_all("p")
-        if len(paragraphs) >= 1 and any(len(p.get_text(strip=True)) > 50 for p in paragraphs):
-            found_fields.append("description")
-            score += 0.2
-
-        # Check for rating (optional) - use schema patterns
-        rating_patterns = [p for p in validation_patterns if "rating" in p or "star" in p]
-        if any(re.search(pattern, text, re.IGNORECASE) for pattern in rating_patterns):
-            found_fields.append("rating")
-            score += 0.1
-
-        # Threshold: need at least name + price
-        is_valid = "name" in found_fields and "price" in found_fields
-
-        reason = (
-            f"Found {len(found_fields)} fields: {', '.join(found_fields)}"
-            if is_valid
-            else f"Missing required fields: {', '.join(missing_fields)}"
-        )
-
-        return {
-            "is_valid": is_valid,
-            "score": min(score, 1.0),
-            "found_fields": found_fields,
-            "missing_fields": missing_fields,
-            "reason": reason,
-        }
-
-    def _validate_event(self, soup: BeautifulSoup, text: str) -> dict:
-        """Validate event fragment has title, date, location, etc."""
-        found_fields = []
-        missing_fields = []
-        score = 0.0
-
-        # Check for event title (required)
-        if soup.find(["h1", "h2", "h3"]) or re.search(r"event", text, re.IGNORECASE):
-            found_fields.append("title")
-            score += 0.3
-        else:
-            missing_fields.append("title")
-
-        # Check for datetime (required) - flexible patterns
-        datetime_patterns = [
-            r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}",  # dates like 12/15/2025
-            r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}",  # Dec 15
-            r"\d{1,2}:\d{2}\s*(AM|PM|am|pm)",  # time like 6:00 PM
-            r"(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,",  # day of week
-        ]
-        if any(re.search(pattern, text) for pattern in datetime_patterns):
-            found_fields.append("datetime")
-            score += 0.4
-        else:
-            missing_fields.append("datetime")
-
-        # Check for location/venue (optional but common)
-        location_indicators = [
-            r"location:",
-            r"venue:",
-            r"online",
-            r"virtual",
-            r"\d+\s+[A-Z][a-z]+\s+(Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd)",
-        ]
-        if any(re.search(pattern, text, re.IGNORECASE) for pattern in location_indicators):
-            found_fields.append("location")
-            score += 0.2
-
-        # Check for organizer/attendees (optional)
-        if re.search(r"(organiz|host|by)\s*:", text, re.IGNORECASE) or re.search(
-            r"\d+\s*(attendee|going|interested)", text, re.IGNORECASE
-        ):
-            found_fields.append("organizer_info")
-            score += 0.1
-
-        # Threshold: need at least title + datetime
-        is_valid = "title" in found_fields and "datetime" in found_fields
-
-        reason = (
-            f"Found {len(found_fields)} fields: {', '.join(found_fields)}"
-            if is_valid
-            else f"Missing required fields: {', '.join(missing_fields)}"
-        )
-
-        return {
-            "is_valid": is_valid,
-            "score": min(score, 1.0),
-            "found_fields": found_fields,
-            "missing_fields": missing_fields,
-            "reason": reason,
-        }
-
-    def _validate_pricing_table(self, soup: BeautifulSoup, text: str) -> dict:
-        """Validate pricing table has multiple plans with prices and features."""
-        found_fields = []
-        missing_fields = []
-        score = 0.0
-
-        # Check for pricing indicators
-        price_patterns = [
-            r"\$\d+",
-            r"\d+\s*(USD|EUR|GBP)",
-            r"(free|trial)",
-            r"contact\s+sales",
-            r"/month|/year|monthly|yearly|annually",
-        ]
-        if any(re.search(pattern, text, re.IGNORECASE) for pattern in price_patterns):
-            found_fields.append("pricing_info")
-            score += 0.4
-        else:
-            missing_fields.append("pricing_info")
-
-        # Check for multiple plans (look for plan names like "Basic", "Pro", "Enterprise")
-        plan_indicators = soup.find_all(["h2", "h3", "h4"])
-        if len(plan_indicators) >= 2:
-            found_fields.append("multiple_plans")
-            score += 0.3
-        else:
-            missing_fields.append("multiple_plans (need 2+)")
-
-        # Check for features list
-        list_items = soup.find_all("li")
-        if len(list_items) >= 5:
-            found_fields.append("features")
-            score += 0.3
-
-        # Threshold: need pricing_info + multiple_plans
-        is_valid = "pricing_info" in found_fields and "multiple_plans" in found_fields
-
-        reason = (
-            f"Found {len(found_fields)} fields: {', '.join(found_fields)}"
-            if is_valid
-            else f"Missing required fields: {', '.join(missing_fields)}"
-        )
-
-        return {
-            "is_valid": is_valid,
-            "score": min(score, 1.0),
-            "found_fields": found_fields,
-            "missing_fields": missing_fields,
-            "reason": reason,
-        }
-
-    def _validate_job_posting(self, soup: BeautifulSoup, text: str) -> dict:
-        """Validate job posting has title, company, location (simplified listing format)."""
-        found_fields = []
-        missing_fields = []
-        score = 0.0
-
-        # Check for job title (required)
-        if soup.find(["h1", "h2"]):
-            found_fields.append("title")
-            score += 0.4
-        else:
-            missing_fields.append("title")
-
-        # Check for company name
-        if re.search(r"company:", text, re.IGNORECASE) or soup.find(class_=lambda x: x and "company" in x.lower()):
-            found_fields.append("company")
-            score += 0.3
-        else:
-            # Sometimes company is implicit if it's on their domain
-            found_fields.append("company")
-            score += 0.2
-
-        # Check for location
-        location_patterns = [
-            r"(remote|hybrid|on-?site)",
-            r"(location|based in):",
-            r"[A-Z][a-z]+,\s*[A-Z]{2}",  # City, ST format
-        ]
-        if any(re.search(pattern, text, re.IGNORECASE) for pattern in location_patterns):
-            found_fields.append("location")
-            score += 0.2
-
-        # Check for employment type
-        if re.search(r"(full-?time|part-?time|contract|intern)", text, re.IGNORECASE):
-            found_fields.append("employment_type")
-            score += 0.1
-
-        # Threshold: need at least title
-        is_valid = "title" in found_fields
-
-        reason = (
-            f"Found {len(found_fields)} fields: {', '.join(found_fields)}"
-            if is_valid
-            else f"Missing required fields: {', '.join(missing_fields)}"
-        )
-
-        return {
-            "is_valid": is_valid,
-            "score": min(score, 1.0),
-            "found_fields": found_fields,
-            "missing_fields": missing_fields,
-            "reason": reason,
-        }
-
-    def _validate_person(self, soup: BeautifulSoup, text: str) -> dict:
-        """Validate person profile has name, title/role, and contact or bio."""
-        found_fields = []
-        missing_fields = []
-        score = 0.0
-
-        # Check for name (required) - usually in h1, h2, or h3
-        headings = soup.find_all(["h1", "h2", "h3"])
-        if headings:
-            found_fields.append("name")
-            score += 0.4
-        else:
-            missing_fields.append("name")
-
-        # Check for title/role
-        title_patterns = [
-            r"(professor|dr\.|phd|researcher|engineer|scientist|director|manager)",
-            r"(title|position|role):",
-        ]
-        if any(re.search(pattern, text, re.IGNORECASE) for pattern in title_patterns):
-            found_fields.append("title")
-            score += 0.3
-
-        # Check for bio/description
-        paragraphs = soup.find_all("p")
-        if len(paragraphs) >= 1 and any(len(p.get_text(strip=True)) > 100 for p in paragraphs):
-            found_fields.append("bio")
-            score += 0.2
-
-        # Check for contact info (email, phone, or social links)
-        contact_patterns = [
-            r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",  # email
-            r"linkedin\.com",
-            r"\(\d{3}\)\s*\d{3}-\d{4}",  # phone
-        ]
-        if any(re.search(pattern, text, re.IGNORECASE) for pattern in contact_patterns):
-            found_fields.append("contact")
-            score += 0.1
-
-        # Threshold: need at least name + (title OR bio)
-        is_valid = "name" in found_fields and ("title" in found_fields or "bio" in found_fields)
-
-        reason = (
-            f"Found {len(found_fields)} fields: {', '.join(found_fields)}"
-            if is_valid
-            else f"Missing required fields: {', '.join(missing_fields)}"
-        )
-
-        return {
-            "is_valid": is_valid,
-            "score": min(score, 1.0),
-            "found_fields": found_fields,
-            "missing_fields": missing_fields,
+            "score": score,
+            "matched_patterns": matched_patterns[:5],  # Show first 5 for debugging
+            "total_patterns": total_patterns,
             "reason": reason,
         }
 
@@ -818,8 +486,8 @@ class FragmentCollector:
             "requires_annotation": True,
             "validation": {
                 "score": validation_result["score"],
-                "found_fields": validation_result["found_fields"],
-                "missing_fields": validation_result["missing_fields"],
+                "matched_patterns": validation_result.get("matched_patterns", []),
+                "total_patterns": validation_result.get("total_patterns", 0),
             },
         }
         metadata_path = self.candidates_dir / f"{fragment_type}_{fragment_id}.json"
@@ -828,9 +496,11 @@ class FragmentCollector:
         # Create annotation template
         self._create_annotation_template(fragment_type, fragment_id)
 
-        print(f"✓ Saved {fragment_type} fragment: {fragment_id} (score: {validation_result['score']:.2f})")
+        print(f"✓ Saved {fragment_type} fragment: {fragment_id} (score: {validation_result['score']:.2%})")
         print(f"  Source: {source_url}")
-        print(f"  Found fields: {', '.join(validation_result['found_fields'])}")
+        print(
+            f"  Matched: {len(validation_result.get('matched_patterns', []))}/{validation_result.get('total_patterns', 0)} patterns"  # noqa: E501
+        )
         print(f"  Files: {html_path.name}, {metadata_path.name}")
 
     def save_negative_fragment(self, fragment_html: str, fragment_type: str, source_url: str, validation_result: dict):
@@ -850,8 +520,8 @@ class FragmentCollector:
             "rejection_reason": validation_result["reason"],
             "validation": {
                 "score": validation_result["score"],
-                "found_fields": validation_result["found_fields"],
-                "missing_fields": validation_result["missing_fields"],
+                "matched_patterns": validation_result.get("matched_patterns", []),
+                "total_patterns": validation_result.get("total_patterns", 0),
             },
             "requires_annotation": True,
         }
@@ -861,7 +531,7 @@ class FragmentCollector:
         # Create negative annotation template
         self._create_negative_annotation_template(fragment_type, fragment_id, validation_result)
 
-        print(f"✓ Saved negative {fragment_type} fragment: {fragment_id} (score: {validation_result['score']:.2f})")
+        print(f"✓ Saved negative {fragment_type} fragment: {fragment_id} (score: {validation_result['score']:.2%})")
         print(f"  Rejection: {validation_result['reason']}")
         print(f"  Files: {html_path.name}, {metadata_path.name}")
 
@@ -874,16 +544,13 @@ class FragmentCollector:
             "type": "negative",
             "expected_type": fragment_type,
             "rejection_reason": validation_result["reason"],
-            "missing_fields": validation_result["missing_fields"],
+            "matched_patterns": validation_result.get("matched_patterns", []),
+            "total_patterns": validation_result.get("total_patterns", 0),
             # What should be extracted to demonstrate this is a negative example?
             "negative_indicator_fragment": (
                 "TODO: Extract the HTML fragment that shows why this is negative "
-                "(e.g., 'Missing ingredients list', 'No price found', etc.)"
+                f"(only {validation_result.get('score', 0):.1%} of patterns matched)"
             ),
-            "extracted_fields": {
-                "found": validation_result["found_fields"],
-                "values": "TODO: What values were actually found (if any)? Use null for missing required fields",
-            },
             "notes": "TODO: Any additional notes about why this failed validation",
         }
 
