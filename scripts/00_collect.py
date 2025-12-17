@@ -534,6 +534,67 @@ class FragmentCollector:
     # URL DISCOVERY METHODS
     # =========================================================================
 
+    def _get_discovery_query(self, fragment_type: str) -> str:
+        """Get type-specific query for relevance scoring."""
+        queries = {
+            "recipe": "recipe ingredients instructions cooking steps directions",
+            "event": "event date time location venue organizer attend",
+            "pricing_table": "pricing plans features price subscription tier",
+            "job_posting": "job position title company location department career",
+            "person": "person profile bio contact team member faculty",
+        }
+        return queries.get(fragment_type, "")
+
+    def _extract_url_strings(self, urls: list) -> list[str]:
+        """Extract URL strings from various formats."""
+        url_strings = []
+        for url_item in urls:
+            if isinstance(url_item, dict):
+                url_strings.append(url_item.get("url", str(url_item)))
+            elif hasattr(url_item, "url"):
+                url_strings.append(url_item.url)
+            else:
+                url_strings.append(str(url_item))
+        return url_strings
+
+    async def _discover_domain_urls(
+        self, seeder, domain: str, pattern: str, max_urls: int, fragment_type: str
+    ) -> list[str]:
+        """Discover URLs for a single domain."""
+        print(f"\n📍 Domain: {domain}")
+        print(f"   Pattern: {pattern}")
+        print(f"   Max URLs: {max_urls}")
+
+        try:
+            query = self._get_discovery_query(fragment_type)
+
+            # Configure sitemap+cc URL discovery (combines sitemap + Common Crawl)
+            seeding_config = SeedingConfig(
+                source="sitemap+cc",  # Use both sitemap and Common Crawl
+                pattern=pattern,
+                extract_head=True,  # Get metadata for scoring
+                query=query,
+                scoring_method="bm25",
+                score_threshold=0.1,  # Very low threshold for maximum discovery
+                max_urls=max_urls,
+                live_check=False,  # Skip live check for speed
+                concurrency=5,
+            )
+
+            # Discover URLs
+            urls = await seeder.urls(domain, seeding_config)
+            url_strings = self._extract_url_strings(urls)
+
+            print(f"   ✓ Discovered {len(url_strings)} URLs")
+            if url_strings:
+                print(f"   Example: {url_strings[0]}")
+
+            return url_strings
+
+        except Exception as e:
+            print(f"   ✗ Failed to discover URLs: {e}")
+            return []
+
     async def discover_urls(self, fragment_type: str) -> dict[str, list[str]]:
         """Discover URLs from domain sitemaps using AsyncUrlSeeder."""
         domain_configs = self.domain_configs.get(fragment_type, [])
@@ -552,57 +613,8 @@ class FragmentCollector:
                 pattern = config["pattern"]
                 max_urls = config.get("max_urls", 25)
 
-                print(f"\n📍 Domain: {domain}")
-                print(f"   Pattern: {pattern}")
-                print(f"   Max URLs: {max_urls}")
-
-                try:
-                    # Type-specific queries for relevance scoring
-                    queries = {
-                        "recipe": "recipe ingredients instructions cooking steps directions",
-                        "event": "event date time location venue organizer attend",
-                        "pricing_table": "pricing plans features price subscription tier",
-                        "job_posting": "job position title company location department career",
-                        "person": "person profile bio contact team member faculty",
-                    }
-                    query = queries.get(fragment_type, "")
-
-                    # Configure sitemap+cc URL discovery (combines sitemap + Common Crawl)
-                    # TODO: higher max_urls/concurrency
-                    seeding_config = SeedingConfig(
-                        source="sitemap+cc",  # Use both sitemap and Common Crawl
-                        pattern=pattern,
-                        extract_head=True,  # Get metadata for scoring
-                        query=query,
-                        scoring_method="bm25",
-                        score_threshold=0.1,  # Very low threshold for maximum discovery
-                        max_urls=max_urls,
-                        live_check=False,  # Skip live check for speed
-                        concurrency=5,
-                    )
-
-                    # Discover URLs
-                    urls = await seeder.urls(domain, seeding_config)
-
-                    # Extract just the URL strings (handle dict or object format)
-                    url_strings = []
-                    for url_item in urls:
-                        if isinstance(url_item, dict):
-                            url_strings.append(url_item.get("url", str(url_item)))
-                        elif hasattr(url_item, "url"):
-                            url_strings.append(url_item.url)
-                        else:
-                            url_strings.append(str(url_item))
-
-                    discovered_urls[domain] = url_strings
-
-                    print(f"   ✓ Discovered {len(url_strings)} URLs")
-                    if url_strings:
-                        print(f"   Example: {url_strings[0]}")
-
-                except Exception as e:
-                    print(f"   ✗ Failed to discover URLs: {e}")
-                    discovered_urls[domain] = []
+                url_strings = await self._discover_domain_urls(seeder, domain, pattern, max_urls, fragment_type)
+                discovered_urls[domain] = url_strings
 
         total_discovered = sum(len(urls) for urls in discovered_urls.values())
         print(f"\n✅ Total discovered: {total_discovered} URLs across {len(discovered_urls)} domains")
@@ -613,12 +625,8 @@ class FragmentCollector:
     # VALIDATION METHODS
     # =========================================================================
 
-    def validate_fragment(self, fragment_html: str, fragment_type: str) -> dict:
-        """Validate fragment by checking negative patterns, then positive pattern matches."""
-        soup = BeautifulSoup(fragment_html, "html.parser")
-        text = soup.get_text(separator="\n", strip=True)
-
-        # STEP 1: Check for negative patterns first
+    def _check_negative_patterns(self, fragment_html: str, text: str) -> dict | None:
+        """Check for negative patterns."""
         # Order matters: check more common patterns first to avoid false positives
         negative_schemas = {
             "auth_required": get_schema("auth_required"),  # Most common: check first
@@ -631,16 +639,7 @@ class FragmentCollector:
                 continue
 
             negative_patterns = negative_schema.NEGATIVE_VALIDATION_PATTERNS
-            matched_negative = []
-
-            # Check if negative patterns match
-            for pattern in negative_patterns:
-                try:
-                    # Search in both HTML and text
-                    if re.search(pattern, fragment_html, re.IGNORECASE) or re.search(pattern, text, re.IGNORECASE):
-                        matched_negative.append(pattern)
-                except re.error:
-                    continue
+            matched_negative = self._match_patterns(negative_patterns, fragment_html, text)
 
             # If 5+ negative patterns match, classify as that negative type
             # Higher threshold (5+) prevents false positives from hidden error banners/templates
@@ -654,7 +653,21 @@ class FragmentCollector:
                     "negative_type": negative_type,
                 }
 
-        # STEP 2: Check for positive patterns
+        return None
+
+    def _match_patterns(self, patterns: list[str], *texts: str) -> list[str]:
+        """Match regex patterns against one or more text strings."""
+        matched = []
+        for pattern in patterns:
+            try:
+                if any(re.search(pattern, text, re.IGNORECASE) for text in texts):
+                    matched.append(pattern)
+            except re.error:
+                continue
+        return matched
+
+    def _check_positive_patterns(self, text: str, fragment_type: str) -> dict:
+        """Check for positive patterns."""
         try:
             schema = get_schema(fragment_type)
         except ValueError:
@@ -678,16 +691,7 @@ class FragmentCollector:
             }
 
         patterns = schema.VALIDATION_PATTERNS
-        matched_patterns = []
-
-        # Count how many patterns match
-        for pattern in patterns:
-            try:
-                if re.search(pattern, text, re.IGNORECASE):
-                    matched_patterns.append(pattern)
-            except re.error:
-                # Skip invalid patterns
-                continue
+        matched_patterns = self._match_patterns(patterns, text)
 
         # Calculate quality score as percentage of patterns matched
         total_patterns = len(patterns)
@@ -710,6 +714,19 @@ class FragmentCollector:
             "reason": reason,
             "negative_type": None,
         }
+
+    def validate_fragment(self, fragment_html: str, fragment_type: str) -> dict:
+        """Validate fragment by checking negative patterns, then positive pattern matches."""
+        soup = BeautifulSoup(fragment_html, "html.parser")
+        text = soup.get_text(separator="\n", strip=True)
+
+        # STEP 1: Check for negative patterns first
+        negative_result = self._check_negative_patterns(fragment_html, text)
+        if negative_result:
+            return negative_result
+
+        # STEP 2: Check for positive patterns
+        return self._check_positive_patterns(text, fragment_type)
 
     # =========================================================================
     # FRAGMENT EXTRACTION METHODS
@@ -939,23 +956,11 @@ class FragmentCollector:
     # COLLECTION ORCHESTRATION
     # =========================================================================
 
-    async def collect_with_deep_crawl(self, fragment_type: str, config: dict):
-        """Collect fragments using deep crawling from a seed URL."""
-        seed_url = config["seed_url"]
-        max_pages = config.get("max_pages", 10)
-        url_patterns = config.get("url_patterns")
-
-        print(f"\n🔍 Deep crawling: {seed_url}")
-        print(f"   Max pages: {max_pages}")
-        if url_patterns:
-            print(f"   URL patterns: {', '.join(url_patterns)}")
-
-        # Configure URL filters
-        # For authrequired/paywall: use hardcoded patterns (working well)
-        # For new types: use configurable patterns from config
+    def _create_filter_chain(self, fragment_type: str, url_patterns: list[str] | None) -> FilterChain | None:
+        """Create URL filter chain based on fragment type and patterns."""
         if fragment_type == "authrequired":
             # Match login/signin/auth URLs
-            filter_chain = FilterChain(
+            return FilterChain(
                 [
                     URLPatternFilter(
                         patterns=[
@@ -971,7 +976,7 @@ class FragmentCollector:
             )
         elif fragment_type == "paywall_content":
             # Match article URLs
-            filter_chain = FilterChain(
+            return FilterChain(
                 [
                     URLPatternFilter(
                         patterns=[
@@ -985,9 +990,44 @@ class FragmentCollector:
             )
         elif url_patterns:
             # Use configurable patterns for new types (captcha_or_bot_check, etc.)
-            filter_chain = FilterChain([URLPatternFilter(patterns=url_patterns)])
+            return FilterChain([URLPatternFilter(patterns=url_patterns)])
         else:
-            filter_chain = None
+            return None
+
+    def _process_crawl_result(self, result, fragment_type: str) -> tuple[int, int]:
+        """Process a single crawl result."""
+        if not result.success:
+            return 0, 0
+
+        # Extract fragment
+        fragment_html = self.extract_fragment(result.html, fragment_type)
+        if not fragment_html:
+            return 0, 0
+
+        # Validate
+        validation_result = self.validate_fragment(fragment_html, fragment_type)
+
+        # Save based on validation result
+        if validation_result["is_valid"]:
+            self.save_fragment(fragment_html, fragment_type, result.url, validation_result)
+            return 1, 0
+        else:
+            self.save_negative_fragment(fragment_html, fragment_type, result.url, validation_result)
+            return 0, 1
+
+    async def collect_with_deep_crawl(self, fragment_type: str, config: dict):
+        """Collect fragments using deep crawling from a seed URL."""
+        seed_url = config["seed_url"]
+        max_pages = config.get("max_pages", 10)
+        url_patterns = config.get("url_patterns")
+
+        print(f"\n🔍 Deep crawling: {seed_url}")
+        print(f"   Max pages: {max_pages}")
+        if url_patterns:
+            print(f"   URL patterns: {', '.join(url_patterns)}")
+
+        # Configure URL filters
+        filter_chain = self._create_filter_chain(fragment_type, url_patterns)
 
         # Configure deep crawling strategy
         if filter_chain:
@@ -1023,30 +1063,130 @@ class FragmentCollector:
 
                 # Iterate through all crawled results
                 for result in results:
-                    if not result.success:
-                        continue
-
-                    # Extract fragment
-                    fragment_html = self.extract_fragment(result.html, fragment_type)
-                    if not fragment_html:
-                        continue
-
-                    # Validate
-                    validation_result = self.validate_fragment(fragment_html, fragment_type)
-
-                    # Save based on validation result
-                    if validation_result["is_valid"]:
-                        self.save_fragment(fragment_html, fragment_type, result.url, validation_result)
-                        collected += 1
-                    else:
-                        self.save_negative_fragment(fragment_html, fragment_type, result.url, validation_result)
-                        rejected += 1
+                    c, r = self._process_crawl_result(result, fragment_type)
+                    collected += c
+                    rejected += r
 
         except Exception as e:
             print(f"   ❌ Error during deep crawl: {e}")
 
         print(f"   ✓ Collected: {collected} positive, {rejected} negative")
         return collected, rejected
+
+    def _create_error_validation(self, status_code: int) -> dict:
+        """Create validation result for error page based on status code."""
+        return {
+            "is_valid": False,
+            "score": 0.0,
+            "matched_patterns": [f"HTTP {status_code}"],
+            "total_patterns": 0,
+            "reason": f"HTTP error status code: {status_code}",
+            "negative_type": "error_page",
+        }
+
+    async def _process_single_url(self, url: str, fragment_type: str, validation_stats: dict) -> tuple[int, int]:
+        """Process a single URL: fetch, extract, validate, and save."""
+        print(f"\n  Fetching: {url}")
+
+        # Fetch page
+        html, status_code = await self.fetch_page(url)
+        if not html:
+            print("    ✗ Failed to fetch page")
+            return 0, 0
+
+        print(f"    ✓ Fetched HTML ({len(html)} bytes, status: {status_code})")
+
+        # Extract fragment
+        fragment_html = self.extract_fragment(html, fragment_type)
+        if not fragment_html:
+            print("    ✗ Failed to extract fragment")
+            return 0, 0
+
+        print(f"    ✓ Extracted fragment ({len(fragment_html)} bytes)")
+
+        # Check status code first - auto-detect error pages
+        if status_code and status_code >= 400:
+            error_validation = self._create_error_validation(status_code)
+            print(f"    ⚠️  Error page detected (HTTP {status_code})")
+            self.save_negative_fragment(fragment_html, fragment_type, url, error_validation)
+            validation_stats["invalid"] += 1
+            return 0, 1
+
+        # Validate fragment
+        validation_result = self.validate_fragment(fragment_html, fragment_type)
+        print(f"    📊 Validation: {validation_result['reason']}")
+        print(f"       Score: {validation_result['score']:.2f}")
+
+        if not validation_result["is_valid"]:
+            print(f"    ✗ Fragment rejected - {validation_result['reason']}")
+            self.save_negative_fragment(fragment_html, fragment_type, url, validation_result)
+            validation_stats["invalid"] += 1
+            return 0, 1
+
+        # Save fragment with validation results
+        self.save_fragment(fragment_html, fragment_type, url, validation_result)
+        validation_stats["valid"] += 1
+        validation_stats["total_score"] += validation_result["score"]
+        return 1, 0
+
+    async def _process_sitemap_urls(self, fragment_type: str, validation_stats: dict) -> tuple[int, int, int]:
+        """Process URLs discovered via sitemap."""
+        # Step 1: Discover URLs from sitemaps
+        discovered_urls = await self.discover_urls(fragment_type)
+        domain_url_count = sum(len(urls) for urls in discovered_urls.values())
+
+        # Step 2: Fetch and process each discovered URL
+        print(f"\n📥 Fetching and validating {domain_url_count} discovered URLs...")
+        print("-" * 70)
+
+        collected = 0
+        rejected = 0
+
+        for domain, urls in discovered_urls.items():
+            print(f"\n🌐 Processing {len(urls)} URLs from {domain}")
+
+            for url in urls:
+                c, r = await self._process_single_url(url, fragment_type, validation_stats)
+                collected += c
+                rejected += r
+
+        return collected, rejected, domain_url_count
+
+    async def _process_deep_crawl_configs(self, fragment_type: str, domain_configs: list[dict]) -> tuple[int, int]:
+        """Process deep crawl configurations."""
+        print(f"🔍 Using deep crawling from {len(domain_configs)} seed URLs...")
+        print("-" * 70)
+
+        collected = 0
+        rejected = 0
+
+        for config in domain_configs:
+            c, r = await self.collect_with_deep_crawl(fragment_type, config)
+            collected += c
+            rejected += r
+
+        return collected, rejected
+
+    def _print_summary(self, total_discovered: int, total_collected: int, total_rejected: int, validation_stats: dict):
+        """Print collection summary statistics."""
+        print("\n" + "=" * 70)
+        print("✅ Collection complete!")
+        print("=" * 70)
+        print(f"Discovered: {total_discovered} URLs")
+        print(f"Collected (positive): {total_collected} fragments")
+        print(f"Collected (negative): {total_rejected} fragments")
+
+        if total_collected > 0:
+            avg_score = validation_stats["total_score"] / total_collected
+            print(f"Average quality score: {avg_score:.2f}")
+
+        if total_discovered > 0:
+            success_rate = (total_collected / total_discovered) * 100
+            print(f"Success rate: {success_rate:.1f}%")
+            rejection_rate = (total_rejected / total_discovered) * 100
+            print(f"Rejection rate: {rejection_rate:.1f}%")
+
+        print("=" * 70 + "\n")
 
     async def collect_fragments(self, categories: list[str] | None = None):
         """Collect fragments using sitemap-based URL discovery or deep crawling."""
@@ -1083,127 +1223,23 @@ class FragmentCollector:
 
             if uses_deep_crawl:
                 # Use deep crawling for negative types (authrequired, errorpage, captcha, etc.)
-                print(f"🔍 Using deep crawling from {len(domain_configs)} seed URLs...")
-                print("-" * 70)
+                collected, rejected = await self._process_deep_crawl_configs(fragment_type, domain_configs)
+                total_collected += collected
+                total_rejected += rejected
+            else:
+                # Use sitemap-based discovery (traditional approach)
+                collected, rejected, discovered = await self._process_sitemap_urls(fragment_type, validation_stats)
+                total_collected += collected
+                total_rejected += rejected
+                total_discovered += discovered
 
-                for config in domain_configs:
-                    collected, rejected = await self.collect_with_deep_crawl(fragment_type, config)
-                    total_collected += collected
-                    total_rejected += rejected
-
-                continue
-
-            # Step 1: Discover URLs from sitemaps (traditional approach)
-            discovered_urls = await self.discover_urls(fragment_type)
-            domain_url_count = sum(len(urls) for urls in discovered_urls.values())
-            total_discovered += domain_url_count
-
-            # Step 2: Fetch and process each discovered URL
-            print(f"\n📥 Fetching and validating {domain_url_count} discovered URLs...")
-            print("-" * 70)
-
-            for domain, urls in discovered_urls.items():
-                print(f"\n🌐 Processing {len(urls)} URLs from {domain}")
-
-                # TODO: parallelise fetch and process page
-                for url in urls:
-                    print(f"\n  Fetching: {url}")
-
-                    # Fetch page
-                    html, status_code = await self.fetch_page(url)
-                    if not html:
-                        print("    ✗ Failed to fetch page")
-                        continue
-
-                    print(f"    ✓ Fetched HTML ({len(html)} bytes, status: {status_code})")
-
-                    # Extract fragment
-                    fragment_html = self.extract_fragment(html, fragment_type)
-                    if not fragment_html:
-                        print("    ✗ Failed to extract fragment")
-                        continue
-
-                    print(f"    ✓ Extracted fragment ({len(fragment_html)} bytes)")
-
-                    # Check status code first - auto-detect error pages
-                    if status_code and status_code >= 400:
-                        error_validation = {
-                            "is_valid": False,
-                            "score": 0.0,
-                            "matched_patterns": [f"HTTP {status_code}"],
-                            "total_patterns": 0,
-                            "reason": f"HTTP error status code: {status_code}",
-                            "negative_type": "error_page",
-                        }
-                        print(f"    ⚠️  Error page detected (HTTP {status_code})")
-                        self.save_negative_fragment(fragment_html, fragment_type, url, error_validation)
-                        total_rejected += 1
-                        validation_stats["invalid"] += 1
-                        continue
-
-                    # Validate fragment
-                    validation_result = self.validate_fragment(fragment_html, fragment_type)
-                    print(f"    📊 Validation: {validation_result['reason']}")
-                    print(f"       Score: {validation_result['score']:.2f}")
-
-                    if not validation_result["is_valid"]:
-                        print(f"    ✗ Fragment rejected - {validation_result['reason']}")
-                        # Save as negative example
-                        self.save_negative_fragment(fragment_html, fragment_type, url, validation_result)
-                        total_rejected += 1
-                        validation_stats["invalid"] += 1
-                        continue
-
-                    # Save fragment with validation results
-                    self.save_fragment(fragment_html, fragment_type, url, validation_result)
-                    total_collected += 1
-                    validation_stats["valid"] += 1
-                    validation_stats["total_score"] += validation_result["score"]
-
-        print("\n" + "=" * 70)
-        print("✅ Collection complete!")
-        print("=" * 70)
-        print(f"Discovered: {total_discovered} URLs")
-        print(f"Collected (positive): {total_collected} fragments")
-        print(f"Collected (negative): {total_rejected} fragments")
-        if total_collected > 0:
-            avg_score = validation_stats["total_score"] / total_collected
-            print(f"Average quality score: {avg_score:.2f}")
-        if total_discovered > 0:
-            success_rate = (total_collected / total_discovered) * 100
-            print(f"Success rate: {success_rate:.1f}%")
-            rejection_rate = (total_rejected / total_discovered) * 100
-            print(f"Rejection rate: {rejection_rate:.1f}%")
-        print("=" * 70 + "\n")
+        self._print_summary(total_discovered, total_collected, total_rejected, validation_stats)
 
 
 async def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
         description="Collect HTML fragments using Crawl4AI URL seeding",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Collect all categories
-  python scripts/00_collect.py
-
-  # Collect only recipes
-  python scripts/00_collect.py --categories recipe
-
-  # Collect events and pricing tables
-  python scripts/00_collect.py --categories event pricing_table
-
-  # Collect empty SPA shells (negative examples)
-  python scripts/00_collect.py --categories empty_spa_shell
-
-  # Collect all negative examples
-  python scripts/00_collect.py --categories empty_spa_shell authrequired errorpage captcha_or_bot_check
-
-  # Run in parallel (separate terminals)
-  python scripts/00_collect.py --categories recipe &
-  python scripts/00_collect.py --categories event &
-  python scripts/00_collect.py --categories pricing_table &
-        """,
     )
     parser.add_argument(
         "--categories",
