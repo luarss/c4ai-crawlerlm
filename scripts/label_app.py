@@ -257,12 +257,15 @@ class AnnotationLabeler:
                 "Review Count", min_value=0, value=default_count, step=1, key=f"{fragment_id}_review_count"
             )
 
+        availability_options = ["in_stock", "out_of_stock", "pre_order", "limited"]
+        current_availability = data.get("availability")
+        availability_index = (
+            availability_options.index(current_availability) if current_availability in availability_options else 0
+        )
         availability = st.selectbox(
             "Availability",
-            ["in_stock", "out_of_stock", "pre_order", "limited"],
-            index=0
-            if not data.get("availability")
-            else ["in_stock", "out_of_stock", "pre_order", "limited"].index(data.get("availability")),
+            availability_options,
+            index=availability_index,
             key=f"{fragment_id}_availability",
         )
 

@@ -55,7 +55,7 @@ class Event(BaseModel):
     VALIDATION_PATTERNS: ClassVar[list[str]] = [
         r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}",  # dates: 12/15/2025, 12-15-25
         r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}",  # Dec 15, January 1
-        r"\d{1,2}:\d{2}\s*(AM|PM|am|pm)",  # time: 6:00 PM, 14:30
+        r"(?:[01]?\d|2[0-3]):[0-5]\d(?:\s*(?:AM|PM|am|pm))?",  # time: 6:00 PM, 14:30
         r"(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,",  # day of week: Monday, Tue,
         r"(location|venue|address):",  # location indicators
         r"(online|virtual|remote|in-person|hybrid)",  # event type
