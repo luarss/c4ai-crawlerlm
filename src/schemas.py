@@ -2,40 +2,22 @@ from typing import ClassVar, Literal
 
 from pydantic import BaseModel, Field
 
-
-# Supporting Schemas
-class PriceSchema(BaseModel):
-    current: float
-    original: float | None = None
-    currency: str = "USD"
+# =============================================================================
+# SUPPORTING SCHEMAS
+# =============================================================================
 
 
-class RatingSchema(BaseModel):
+class Rating(BaseModel):
     score: float = Field(ge=0, le=5)
     review_count: int = Field(ge=0)
 
 
-# Main Schemas
-class ProductSchema(BaseModel):
-    type: Literal["product"]
-    name: str
-    brand: str | None = None
-    price: PriceSchema
-    rating: RatingSchema | None = None
-    description: str | None = None
-    availability: Literal["in_stock", "out_of_stock", "pre_order", "limited"] | None = None
-    image_url: str | None = None
-
-    VALIDATION_PATTERNS: ClassVar[list[str]] = [
-        r"\$\d+\.?\d*",  # price
-        r"\d+\.?\d*\s*(USD|EUR|GBP)",  # price with currency
-        r"rating:\s*\d+(\.\d+)?",  # rating
-        r"\d+(\.\d+)?\s*star",  # star rating
-        r"★+",  # star symbols
-    ]
+# =============================================================================
+# POSITIVE SCHEMAS (Content extraction targets)
+# =============================================================================
 
 
-class RecipeSchema(BaseModel):
+class Recipe(BaseModel):
     type: Literal["recipe"]
     name: str
     description: str | None = None
@@ -46,7 +28,7 @@ class RecipeSchema(BaseModel):
     servings: str | None = None
     ingredients: list[str]
     instructions: list[str]
-    rating: RatingSchema | None = None
+    rating: Rating | None = None
 
     VALIDATION_PATTERNS: ClassVar[list[str]] = [
         r"\d+\s*(cup|tablespoon|teaspoon|ounce|pound|gram|ml|tsp|tbsp|oz|lb|g)",  # ingredient measurements
@@ -58,7 +40,7 @@ class RecipeSchema(BaseModel):
     ]
 
 
-class EventSchema(BaseModel):
+class Event(BaseModel):
     type: Literal["event"]
     title: str
     datetime: str
@@ -84,7 +66,7 @@ class EventSchema(BaseModel):
     ]
 
 
-class PricingPlanSchema(BaseModel):
+class PricingPlan(BaseModel):
     name: str
     price: str
     price_amount: float | None = None
@@ -94,9 +76,9 @@ class PricingPlanSchema(BaseModel):
     description: str | None = None
 
 
-class PricingTableSchema(BaseModel):
+class PricingTable(BaseModel):
     type: Literal["pricing_table"]
-    plans: list[PricingPlanSchema]
+    plans: list[PricingPlan]
 
     VALIDATION_PATTERNS: ClassVar[list[str]] = [
         r"\$\d+",  # price: $10, $99
@@ -112,7 +94,7 @@ class PricingTableSchema(BaseModel):
     ]
 
 
-class JobPostingSchema(BaseModel):
+class JobPosting(BaseModel):
     type: Literal["job_posting"]
     title: str
     company: str
@@ -138,7 +120,7 @@ class JobPostingSchema(BaseModel):
     ]
 
 
-class PersonSchema(BaseModel):
+class Person(BaseModel):
     type: Literal["person"]
     name: str
     title: str | None = None
@@ -164,8 +146,12 @@ class PersonSchema(BaseModel):
     ]
 
 
-# Negative Schemas
-class ErrorPageSchema(BaseModel):
+# =============================================================================
+# NEGATIVE SCHEMAS (Error pages, auth walls, empty SPAs)
+# =============================================================================
+
+
+class ErrorPage(BaseModel):
     type: Literal["error_page"]
     error_code: int
     message: str
@@ -190,7 +176,7 @@ class ErrorPageSchema(BaseModel):
     ]
 
 
-class AuthRequiredSchema(BaseModel):
+class AuthRequired(BaseModel):
     type: Literal["auth_required"]
     message: str
     description: str
@@ -218,7 +204,7 @@ class AuthRequiredSchema(BaseModel):
     ]
 
 
-class EmptySPAShellSchema(BaseModel):
+class EmptySPAShell(BaseModel):
     type: Literal["empty_shell"]
     framework: Literal["react", "vue", "angular"] | None = None
     content_available: Literal[False] = False
@@ -244,16 +230,20 @@ class EmptySPAShellSchema(BaseModel):
     ]
 
 
+# =============================================================================
+# REGISTRY & UTILITY FUNCTIONS
+# =============================================================================
+
+
 SCHEMA_REGISTRY = {
-    "product": ProductSchema,
-    "recipe": RecipeSchema,
-    "event": EventSchema,
-    "pricing_table": PricingTableSchema,
-    "job_posting": JobPostingSchema,
-    "person": PersonSchema,
-    "error_page": ErrorPageSchema,
-    "auth_required": AuthRequiredSchema,
-    "empty_shell": EmptySPAShellSchema,
+    "recipe": Recipe,
+    "event": Event,
+    "pricing_table": PricingTable,
+    "job_posting": JobPosting,
+    "person": Person,
+    "error_page": ErrorPage,
+    "auth_required": AuthRequired,
+    "empty_shell": EmptySPAShell,
 }
 
 
@@ -268,3 +258,74 @@ def get_validation_patterns(fragment_type: str) -> dict:
     """Get validation patterns for a fragment type from its schema."""
     schema = get_schema(fragment_type)
     return getattr(schema, "VALIDATION_PATTERNS", {})
+
+
+# Manual annotation templates for each fragment type
+ANNOTATION_TEMPLATES = {
+    "recipe": {
+        "type": "recipe",
+        "name": "TODO",
+        "description": "TODO",
+        "author": "TODO",
+        "prep_time": "TODO",
+        "cook_time": "TODO",
+        "total_time": "TODO",
+        "servings": "TODO",
+        "ingredients": ["TODO"],
+        "instructions": ["TODO"],
+        "rating": {"score": "TODO", "review_count": "TODO"},
+    },
+    "event": {
+        "type": "event",
+        "title": "TODO",
+        "datetime": "TODO",
+        "location": "TODO",
+        "venue_name": "TODO",
+        "price": "TODO",
+        "organizer": "TODO",
+        "attendee_count": "TODO",
+        "description": "TODO",
+        "event_type": "TODO",
+    },
+    "pricing_table": {
+        "type": "pricing_table",
+        "plans": [
+            {
+                "name": "TODO",
+                "price": "TODO",
+                "price_amount": "TODO",
+                "currency": "TODO",
+                "billing_period": "TODO",
+                "features": ["TODO"],
+                "description": "TODO",
+            }
+        ],
+    },
+    "job_posting": {
+        "type": "job_posting",
+        "title": "TODO",
+        "company": "TODO",
+        "location": "TODO",
+        "department": "TODO",
+        "posted_date": "TODO",
+        "employment_type": "TODO",
+        "description": "TODO",
+    },
+    "person": {
+        "type": "person",
+        "name": "TODO",
+        "title": "TODO",
+        "bio": "TODO",
+        "email": "TODO",
+        "phone": "TODO",
+        "linkedin": "TODO",
+        "image_url": "TODO",
+    },
+}
+
+
+def generate_annotation_template(fragment_type: str) -> dict:
+    """Get annotation template for a fragment type."""
+    if fragment_type not in ANNOTATION_TEMPLATES:
+        return {"type": fragment_type, "TODO": "Define template"}
+    return ANNOTATION_TEMPLATES[fragment_type].copy()
