@@ -171,6 +171,24 @@ class ErrorPageSchema(BaseModel):
     message: str
     description: str
 
+    NEGATIVE_VALIDATION_PATTERNS: ClassVar[list[str]] = [
+        r"\b(404|500|503|502|403|429)\b",  # HTTP error codes
+        r"(page|content).{0,30}(not found|cannot be found|can't be found|unavailable|doesn't exist)",
+        r"(error|oops|sorry|uh oh).{0,30}(occurred|happened|wrong|found)",
+        r"something (went )?wrong",
+        r"the (page|url|link|resource).{0,30}(you|your).{0,30}(looking for|requested|tried to access)",
+        r"(broken|dead|invalid).{0,30}(link|url|page)",
+        r"(sorry|apologies|we apologize)",
+        r"(return|go back).{0,30}(home|homepage)",
+        r"error.{0,20}(code|message|details)",
+        r"server.{0,20}(error|unavailable|down)",
+        r"temporarily unavailable",
+        r"under maintenance",
+        r"(too many|rate limit).{0,20}(request|attempt)",
+        r"please (try again|wait).{0,20}(later|moment|shortly)",
+        r"slow down",
+    ]
+
 
 class AuthRequiredSchema(BaseModel):
     type: Literal["auth_required"]
@@ -178,12 +196,52 @@ class AuthRequiredSchema(BaseModel):
     description: str
     content_available: Literal[False] = False
 
+    NEGATIVE_VALIDATION_PATTERNS: ClassVar[list[str]] = [
+        # Login form indicators
+        r'type\s*=\s*["\']password["\']',  # password input field
+        r"(log\s*in|sign\s*in)\s*(with|using)?\s*(google|facebook|apple|github|twitter)",  # social login
+        r"forgot.{0,20}password",  # forgot password link
+        r"(don't|do not).{0,20}have.{0,20}account",  # signup prompt
+        r"(create|register).{0,20}account",  # account creation
+        r"(email|username).{0,20}(and|&).{0,20}password",  # login field labels
+        # Access control messages
+        r"(sign|log).{0,10}(in|up).{0,30}(to|for).{0,30}(continue|access|view|read|see)",
+        r"(subscription|member|premium).{0,30}(required|only|exclusive)",
+        r"(paywall|pay.{0,5}wall)",
+        r"(unlock|subscribe).{0,30}(to|for).{0,30}(read|view|access|continue)",
+        r"(exclusive|premium).{0,30}(content|access|member)",
+        r"(limited|restricted).{0,30}access",
+        r"access.{0,20}(denied|restricted|requires)",
+        # Auth buttons/CTAs
+        r"(continue|proceed).{0,20}with.{0,20}(google|facebook|apple|email)",
+        r"already.{0,20}have.{0,20}account",
+    ]
+
 
 class EmptySPAShellSchema(BaseModel):
     type: Literal["empty_shell"]
     framework: Literal["react", "vue", "angular"] | None = None
     content_available: Literal[False] = False
     reason: Literal["client_side_rendering"] = "client_side_rendering"
+
+    NEGATIVE_VALIDATION_PATTERNS: ClassVar[list[str]] = [
+        # Framework markers
+        r'id\s*=\s*["\'](__next|root|app|__nuxt)["\']',  # React/Next/Vue/Nuxt root divs
+        r"data-react(id|-root|-helmet)",  # React markers
+        r"ng-(version|app|controller|cloak)",  # Angular markers
+        r"__NEXT_DATA__|__nuxt|__NUXT__",  # Framework data injection
+        r"_reactRoot|_reactListening",  # React internal properties
+        # JavaScript requirement messages
+        r"javascript\s*(is\s*)?(required|disabled|not enabled|turned off)",
+        r"enable\s*javascript\s*(to|in).{0,30}(view|use|see|run|access)",
+        r"(please|you must|you need to)\s*enable\s*javascript",
+        r"this (site|app|application).{0,30}requires.{0,30}javascript",
+        r"noscript.{0,50}javascript",  # noscript warnings
+        # Loading/placeholder states
+        r"loading.{0,10}\.\.\.",  # Loading text
+        r"(please|kindly)\s*wait",  # Wait messages
+        r"initializing.{0,30}(application|app)",  # Init messages
+    ]
 
 
 SCHEMA_REGISTRY = {

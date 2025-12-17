@@ -3,10 +3,19 @@ import asyncio
 import hashlib
 import json
 import re
+from collections import Counter
 from pathlib import Path
 
 from bs4 import BeautifulSoup
-from crawl4ai import AsyncUrlSeeder, AsyncWebCrawler, SeedingConfig
+from crawl4ai import (
+    AsyncUrlSeeder,
+    AsyncWebCrawler,
+    BFSDeepCrawlStrategy,
+    CrawlerRunConfig,
+    FilterChain,
+    SeedingConfig,
+    URLPatternFilter,
+)
 
 from src.schemas import get_schema
 
@@ -23,6 +32,7 @@ class FragmentCollector:
 
         # Domain-based configuration for auto-discovery
         # Each domain has pattern, query, and target count
+        # Includes configs that deliberately collect negative examples (auth walls, SPAs, errors)
         self.domain_configs = {
             "recipe": [
                 {
@@ -226,6 +236,136 @@ class FragmentCollector:
                     "max_urls": 20,
                 },
             ],
+            # Negative collectors - sites likely to produce auth walls, paywalls, SPAs
+            "paywall_content": [
+                {
+                    "domain": "nytimes.com",
+                    "pattern": "*/article/*",
+                    "max_urls": 20,
+                },
+                {
+                    "domain": "wsj.com",
+                    "pattern": "*/articles/*",
+                    "max_urls": 20,
+                },
+                {
+                    "domain": "ft.com",
+                    "pattern": "*/content/*",
+                    "max_urls": 20,
+                },
+                {
+                    "domain": "economist.com",
+                    "pattern": "*/article/*",
+                    "max_urls": 20,
+                },
+                {
+                    "domain": "medium.com",
+                    "pattern": "*/*",
+                    "max_urls": 20,
+                },
+            ],
+            "spa_heavy": [
+                # Modern SPA frameworks - likely to have minimal server-rendered content
+                {
+                    "domain": "netflix.com",
+                    "pattern": "*/title/*",
+                    "max_urls": 15,
+                },
+                {
+                    "domain": "spotify.com",
+                    "pattern": "*/playlist/*",
+                    "max_urls": 15,
+                },
+                {
+                    "domain": "figma.com",
+                    "pattern": "*/file/*",
+                    "max_urls": 15,
+                },
+                {
+                    "domain": "notion.so",
+                    "pattern": "*/*",
+                    "max_urls": 15,
+                },
+            ],
+            "authrequired": [
+                # Use deep crawling to find login/signin pages from main pages
+                {
+                    "seed_url": "https://github.com",
+                    "max_pages": 10,
+                },
+                {
+                    "seed_url": "https://gitlab.com",
+                    "max_pages": 10,
+                },
+                {
+                    "seed_url": "https://www.linkedin.com",
+                    "max_pages": 10,
+                },
+                {
+                    "seed_url": "https://medium.com",
+                    "max_pages": 10,
+                },
+                {
+                    "seed_url": "https://twitter.com",
+                    "max_pages": 10,
+                },
+                {
+                    "seed_url": "https://www.reddit.com",
+                    "max_pages": 10,
+                },
+                {
+                    "seed_url": "https://www.instagram.com",
+                    "max_pages": 10,
+                },
+                {
+                    "seed_url": "https://www.pinterest.com",
+                    "max_pages": 10,
+                },
+            ],
+            "error_page": [
+                # Various domains to collect diverse error pages
+                # Using likely-404 paths to trigger error pages
+                {
+                    "domain": "github.com",
+                    "pattern": "*/nonexistent-*",
+                    "max_urls": 10,
+                },
+                {
+                    "domain": "stackoverflow.com",
+                    "pattern": "*/questions/99999999/*",
+                    "max_urls": 10,
+                },
+                {
+                    "domain": "reddit.com",
+                    "pattern": "*/r/nonexistent*",
+                    "max_urls": 10,
+                },
+                {
+                    "domain": "medium.com",
+                    "pattern": "*/deleted-*",
+                    "max_urls": 10,
+                },
+                {
+                    "domain": "twitter.com",
+                    "pattern": "*/status/999999999*",
+                    "max_urls": 10,
+                },
+                {
+                    "domain": "youtube.com",
+                    "pattern": "*/watch?v=deleted*",
+                    "max_urls": 10,
+                },
+                {
+                    "domain": "amazon.com",
+                    "pattern": "*/dp/INVALID*",
+                    "max_urls": 10,
+                },
+                {
+                    "domain": "stripe.com",
+                    "pattern": "*/docs/nonexistent*",
+                    "max_urls": 10,
+                },
+            ],
         }
 
     def _get_fragment_id(self, html: str) -> str:
@@ -315,19 +455,58 @@ class FragmentCollector:
 
     def validate_fragment(self, fragment_html: str, fragment_type: str) -> dict:
         """
-        Validate fragment by counting percentage of schema pattern matches.
+        Validate fragment by:
+        1. First checking for negative patterns (error pages, auth walls, empty SPAs)
+        2. Then counting percentage of positive schema pattern matches
 
         Returns dict with:
-        - is_valid: bool (True if score >= 0.3)
+        - is_valid: bool (True if score >= 0.3 and no negative patterns)
         - score: float (0-1) - percentage of validation patterns that matched
         - matched_patterns: list of patterns that matched
         - total_patterns: int - total patterns checked
         - reason: str explanation
+        - negative_type: str | None - type of negative if detected (error_page, auth_required, empty_shell)
         """
         soup = BeautifulSoup(fragment_html, "html.parser")
         text = soup.get_text(separator="\n", strip=True)
 
-        # Get validation patterns from schema registry
+        # STEP 1: Check for negative patterns first
+        # Order matters: check more common patterns first to avoid false positives
+        negative_schemas = {
+            "auth_required": get_schema("auth_required"),  # Most common: check first
+            "empty_shell": get_schema("empty_shell"),
+            "error_page": get_schema("error_page"),  # Check last (least common)
+        }
+
+        for negative_type, negative_schema in negative_schemas.items():
+            if not hasattr(negative_schema, "NEGATIVE_VALIDATION_PATTERNS"):
+                continue
+
+            negative_patterns = negative_schema.NEGATIVE_VALIDATION_PATTERNS
+            matched_negative = []
+
+            # Check if negative patterns match
+            for pattern in negative_patterns:
+                try:
+                    # Search in both HTML and text
+                    if re.search(pattern, fragment_html, re.IGNORECASE) or re.search(pattern, text, re.IGNORECASE):
+                        matched_negative.append(pattern)
+                except re.error:
+                    continue
+
+            # If 3+ negative patterns match, classify as that negative type
+            # Higher threshold (3+) prevents false positives from incidental matches
+            if len(matched_negative) >= 3:
+                return {
+                    "is_valid": False,
+                    "score": 0.0,
+                    "matched_patterns": matched_negative[:5],
+                    "total_patterns": len(negative_patterns),
+                    "reason": f"Detected {negative_type}: {len(matched_negative)}/{len(negative_patterns)} negative patterns matched",  # noqa: E501
+                    "negative_type": negative_type,
+                }
+
+        # STEP 2: Check for positive patterns (existing logic)
         try:
             schema = get_schema(fragment_type)
         except ValueError:
@@ -337,6 +516,7 @@ class FragmentCollector:
                 "matched_patterns": [],
                 "total_patterns": 0,
                 "reason": f"Unknown fragment type: {fragment_type}",
+                "negative_type": None,
             }
 
         if not hasattr(schema, "VALIDATION_PATTERNS"):
@@ -346,6 +526,7 @@ class FragmentCollector:
                 "matched_patterns": [],
                 "total_patterns": 0,
                 "reason": "No validation patterns defined",
+                "negative_type": None,
             }
 
         patterns = schema.VALIDATION_PATTERNS
@@ -379,6 +560,7 @@ class FragmentCollector:
             "matched_patterns": matched_patterns[:5],  # Show first 5 for debugging
             "total_patterns": total_patterns,
             "reason": reason,
+            "negative_type": None,
         }
 
     async def fetch_page(self, url: str) -> str | None:
@@ -504,17 +686,30 @@ class FragmentCollector:
         print(f"  Files: {html_path.name}, {metadata_path.name}")
 
     def save_negative_fragment(self, fragment_html: str, fragment_type: str, source_url: str, validation_result: dict):
-        """Save rejected fragment as negative example."""
+        """Save rejected fragment as negative example with descriptive naming."""
         fragment_id = self._get_fragment_id(fragment_html)
 
-        # Save HTML
-        html_path = self.negatives_dir / f"{fragment_type}_{fragment_id}.html"
+        # Determine prefix based on negative_type classification
+        negative_type = validation_result.get("negative_type")
+        if negative_type == "error_page":
+            prefix = "errorpage"
+        elif negative_type == "auth_required":
+            prefix = "authrequired"
+        elif negative_type == "empty_shell":
+            prefix = "emptyspashell"
+        else:
+            # Generic negative (low score, no specific anti-pattern detected)
+            prefix = f"{fragment_type}_lowscore"
+
+        # Save HTML with descriptive name
+        html_path = self.negatives_dir / f"{prefix}_{fragment_id}.html"
         html_path.write_text(fragment_html)
 
         # Save metadata with rejection reason
         metadata = {
             "fragment_id": fragment_id,
             "expected_type": fragment_type,  # What it was supposed to be
+            "negative_type": negative_type,  # Specific negative classification (or None)
             "source_url": source_url,
             "status": "negative",
             "rejection_reason": validation_result["reason"],
@@ -525,34 +720,66 @@ class FragmentCollector:
             },
             "requires_annotation": True,
         }
-        metadata_path = self.negatives_dir / f"{fragment_type}_{fragment_id}.json"
+        metadata_path = self.negatives_dir / f"{prefix}_{fragment_id}.json"
         metadata_path.write_text(json.dumps(metadata, indent=2))
 
         # Create negative annotation template
-        self._create_negative_annotation_template(fragment_type, fragment_id, validation_result)
+        self._create_negative_annotation_template(prefix, fragment_id, validation_result)
 
-        print(f"✓ Saved negative {fragment_type} fragment: {fragment_id} (score: {validation_result['score']:.2%})")
+        # Enhanced output
+        negative_label = negative_type if negative_type else "low score"
+        print(f"✓ Saved negative fragment [{negative_label}]: {fragment_id}")
+        print(f"  Type: {prefix}")
+        print(f"  Expected: {fragment_type}")
+        print(f"  Score: {validation_result['score']:.2%}")
         print(f"  Rejection: {validation_result['reason']}")
         print(f"  Files: {html_path.name}, {metadata_path.name}")
 
-    def _create_negative_annotation_template(self, fragment_type: str, fragment_id: str, validation_result: dict):
+    def _create_negative_annotation_template(self, prefix: str, fragment_id: str, validation_result: dict):
         """Create annotation template for negative examples."""
-        template_path = self.negatives_dir / f"{fragment_type}_{fragment_id}_annotation.json"
+        template_path = self.negatives_dir / f"{prefix}_{fragment_id}_annotation.json"
 
-        # For negatives, we want to extract the fragment that shows WHY it's negative
-        template = {
-            "type": "negative",
-            "expected_type": fragment_type,
-            "rejection_reason": validation_result["reason"],
-            "matched_patterns": validation_result.get("matched_patterns", []),
-            "total_patterns": validation_result.get("total_patterns", 0),
-            # What should be extracted to demonstrate this is a negative example?
-            "negative_indicator_fragment": (
-                "TODO: Extract the HTML fragment that shows why this is negative "
-                f"(only {validation_result.get('score', 0):.1%} of patterns matched)"
-            ),
-            "notes": "TODO: Any additional notes about why this failed validation",
-        }
+        negative_type = validation_result.get("negative_type")
+
+        # Create type-specific templates
+        if negative_type == "error_page":
+            template = {
+                "type": "error_page",
+                "error_code": "TODO: Extract error code (e.g., 404, 500)",
+                "message": "TODO: Extract error message",
+                "description": "TODO: Extract error description",
+                "matched_negative_patterns": validation_result.get("matched_patterns", []),
+            }
+        elif negative_type == "auth_required":
+            template = {
+                "type": "auth_required",
+                "message": "TODO: Extract auth required message",
+                "description": "TODO: Extract description (e.g., 'Please log in to view this content')",
+                "content_available": False,
+                "matched_negative_patterns": validation_result.get("matched_patterns", []),
+            }
+        elif negative_type == "empty_shell":
+            template = {
+                "type": "empty_shell",
+                "framework": "TODO: Identify framework (react, vue, angular) or null",
+                "content_available": False,
+                "reason": "client_side_rendering",
+                "matched_negative_patterns": validation_result.get("matched_patterns", []),
+            }
+        else:
+            # Generic low-score negative
+            template = {
+                "type": "negative",
+                "expected_type": prefix.replace("_lowscore", ""),
+                "rejection_reason": validation_result["reason"],
+                "matched_patterns": validation_result.get("matched_patterns", []),
+                "total_patterns": validation_result.get("total_patterns", 0),
+                "negative_indicator_fragment": (
+                    "TODO: Extract the HTML fragment that shows why this is negative "
+                    f"(only {validation_result.get('score', 0):.1%} of patterns matched)"
+                ),
+                "notes": "TODO: Any additional notes about why this failed validation",
+            }
 
         template_path.write_text(json.dumps(template, indent=2))
         print(f"  Negative annotation template: {template_path.name}")
@@ -651,6 +878,105 @@ class FragmentCollector:
         template_path.write_text(json.dumps(template, indent=2))
         print(f"  Annotation template: {template_path.name}")
 
+    async def collect_with_deep_crawl(self, fragment_type: str, config: dict):
+        """
+        Collect fragments using deep crawling from a seed URL.
+
+        Args:
+            fragment_type: Type of fragment (e.g., 'auth_required')
+            config: Dict with 'seed_url' and 'max_pages'
+        """
+        seed_url = config["seed_url"]
+        max_pages = config.get("max_pages", 10)
+
+        print(f"\n🔍 Deep crawling: {seed_url}")
+        print(f"   Max pages: {max_pages}")
+
+        # Configure URL filters for authrequired
+        if fragment_type == "authrequired":
+            # Match login/signin/auth URLs
+            filter_chain = FilterChain(
+                [
+                    URLPatternFilter(
+                        patterns=[
+                            "*/login*",
+                            "*/signin*",
+                            "*/sign-in*",
+                            "*/auth*",
+                            "*/accounts/*",
+                            "*/user/login*",
+                        ]
+                    )
+                ]
+            )
+        elif fragment_type == "paywall_content":
+            # Match article URLs
+            filter_chain = FilterChain(
+                [
+                    URLPatternFilter(
+                        patterns=[
+                            "*/article/*",
+                            "*/articles/*",
+                            "*/story/*",
+                            "*/p/*",  # Medium
+                        ]
+                    )
+                ]
+            )
+        else:
+            filter_chain = None
+
+        # Configure deep crawling strategy
+        deep_crawl_strategy = BFSDeepCrawlStrategy(
+            max_depth=2,
+            max_pages=max_pages,
+            include_external=False,
+            filter_chain=filter_chain,
+        )
+
+        crawl_config = CrawlerRunConfig(
+            deep_crawl_strategy=deep_crawl_strategy,
+        )
+
+        collected = 0
+        rejected = 0
+
+        try:
+            async with AsyncWebCrawler(verbose=False) as crawler:
+                # Deep crawl returns a list of results
+                results = await crawler.arun(url=seed_url, config=crawl_config)
+
+                # Handle both list and single result container
+                if not isinstance(results, list):
+                    results = [results]
+
+                # Iterate through all crawled results
+                for result in results:
+                    if not result.success:
+                        continue
+
+                    # Extract fragment
+                    fragment_html = self.extract_fragment(result.html, fragment_type)
+                    if not fragment_html:
+                        continue
+
+                    # Validate
+                    validation_result = self.validate_fragment(fragment_html, fragment_type)
+
+                    # Save based on validation
+                    if validation_result["is_valid"]:
+                        self.save_fragment(fragment_html, fragment_type, result.url, validation_result)
+                        collected += 1
+                    else:
+                        self.save_negative_fragment(fragment_html, fragment_type, result.url, validation_result)
+                        rejected += 1
+
+        except Exception as e:
+            print(f"   ❌ Error during deep crawl: {e}")
+
+        print(f"   ✓ Collected: {collected} positive, {rejected} negative")
+        return collected, rejected
+
     async def collect_fragments(self, categories: list[str] | None = None):
         """Collect fragments using sitemap-based URL discovery.
 
@@ -681,7 +1007,23 @@ class FragmentCollector:
             print(f"\n📦 Processing {fragment_type.upper()} fragments...")
             print("=" * 70)
 
-            # Step 1: Discover URLs from sitemaps
+            # Check if this type uses deep crawling
+            domain_configs = self.domain_configs.get(fragment_type, [])
+            uses_deep_crawl = domain_configs and "seed_url" in domain_configs[0]
+
+            if uses_deep_crawl:
+                # Use deep crawling for negative types (auth_required, paywall_content)
+                print(f"🔍 Using deep crawling from {len(domain_configs)} seed URLs...")
+                print("-" * 70)
+
+                for config in domain_configs:
+                    collected, rejected = await self.collect_with_deep_crawl(fragment_type, config)
+                    total_collected += collected
+                    total_rejected += rejected
+
+                continue
+
+            # Step 1: Discover URLs from sitemaps (traditional approach)
             discovered_urls = await self.discover_urls(fragment_type)
             domain_url_count = sum(len(urls) for urls in discovered_urls.values())
             total_discovered += domain_url_count
@@ -740,6 +1082,7 @@ class FragmentCollector:
         if total_collected > 0:
             avg_score = validation_stats["total_score"] / total_collected
             print(f"Average quality score: {avg_score:.2f}")
+        if total_discovered > 0:
             success_rate = (total_collected / total_discovered) * 100
             print(f"Success rate: {success_rate:.1f}%")
             rejection_rate = (total_rejected / total_discovered) * 100
@@ -754,6 +1097,194 @@ class FragmentCollector:
         print("rates due to SPAs, login walls, and missing fields - these make")
         print("excellent negative examples for training!")
         print("=" * 70 + "\n")
+
+    def reclassify_negatives(self, auto_rename: bool = True):
+        """
+        Re-classify existing negative fragments using new negative pattern detection.
+
+        Analyzes existing negatives and classifies them into specific negative types
+        (error_page, auth_required, empty_shell). Deletes fragments that are only
+        low_score (no specific negative type detected).
+
+        Args:
+            auto_rename: If True, automatically rename files to match new classification
+        """
+        negative_files = sorted(self.negatives_dir.glob("*.html"))
+
+        if not negative_files:
+            print(f"\n⚠️  No negative HTML files found in {self.negatives_dir}")
+            return
+
+        print("\n" + "=" * 70)
+        print(f"🔍 RE-CLASSIFYING {len(negative_files)} NEGATIVE FRAGMENTS")
+        print("=" * 70 + "\n")
+
+        # Track statistics
+        negative_type_counts = Counter()
+        results = []
+        renamed_count = 0
+        deleted_count = 0
+
+        for i, html_file in enumerate(negative_files):
+            # Parse expected type from filename
+            parts = html_file.stem.split("_")
+            if parts[0] == "job" and len(parts) > 1 and parts[1] == "posting":
+                expected_type = "job_posting"
+            else:
+                # Try to infer from filename or default to product
+                expected_type = (
+                    parts[0] if parts[0] in ["recipe", "product", "event", "pricing", "person"] else "product"
+                )
+
+            # Extract fragment_id (last part of filename)
+            fragment_id = parts[-1]
+
+            # Read HTML
+            with open(html_file, encoding="utf-8", errors="replace") as f:
+                html = f.read()
+
+            # Validate using new system
+            validation_result = self.validate_fragment(html, expected_type)
+
+            negative_type = validation_result.get("negative_type")
+            negative_type_counts[negative_type or "low_score"] += 1
+
+            # Determine new prefix
+            if negative_type == "error_page":
+                new_prefix = "errorpage"
+            elif negative_type == "auth_required":
+                new_prefix = "authrequired"
+            elif negative_type == "empty_shell":
+                new_prefix = "emptyspashell"
+            else:
+                # No specific negative type - mark for deletion
+                new_prefix = None
+
+            old_name = html_file.name
+
+            # Delete low_score fragments (no specific negative type)
+            if new_prefix is None:
+                # Delete HTML file
+                html_file.unlink()
+
+                # Delete JSON metadata if exists
+                old_json = html_file.with_suffix(".json")
+                if old_json.exists():
+                    old_json.unlink()
+
+                # Delete annotation template if exists
+                old_annotation = self.negatives_dir / f"{html_file.stem}_annotation.json"
+                if old_annotation.exists():
+                    old_annotation.unlink()
+
+                deleted_count += 1
+
+                results.append(
+                    {
+                        "old_file": old_name,
+                        "deleted": True,
+                        "expected_type": expected_type,
+                        "negative_type": "low_score",
+                        "score": validation_result["score"],
+                        "reason": validation_result["reason"],
+                        "matched_patterns": len(validation_result.get("matched_patterns", [])),
+                    }
+                )
+            else:
+                # Rename to specific negative type
+                new_name = f"{new_prefix}_{fragment_id}.html"
+                needs_rename = old_name != new_name
+
+                if auto_rename and needs_rename:
+                    # Rename HTML file
+                    new_html_path = self.negatives_dir / new_name
+                    html_file.rename(new_html_path)
+
+                    # Rename JSON metadata if exists
+                    old_json = html_file.with_suffix(".json")
+                    if old_json.exists():
+                        new_json = self.negatives_dir / f"{new_prefix}_{fragment_id}.json"
+                        old_json.rename(new_json)
+
+                        # Update metadata with new negative_type
+                        with open(new_json) as f:
+                            metadata = json.load(f)
+                        metadata["negative_type"] = negative_type
+                        metadata["rejection_reason"] = validation_result["reason"]
+                        with open(new_json, "w") as f:
+                            json.dump(metadata, f, indent=2)
+
+                    # Rename annotation template if exists
+                    old_annotation = self.negatives_dir / f"{html_file.stem}_annotation.json"
+                    if old_annotation.exists():
+                        new_annotation = self.negatives_dir / f"{new_prefix}_{fragment_id}_annotation.json"
+                        old_annotation.rename(new_annotation)
+
+                    renamed_count += 1
+
+                results.append(
+                    {
+                        "old_file": old_name,
+                        "new_file": new_name if needs_rename else old_name,
+                        "renamed": needs_rename and auto_rename,
+                        "deleted": False,
+                        "expected_type": expected_type,
+                        "negative_type": negative_type,
+                        "new_prefix": new_prefix,
+                        "score": validation_result["score"],
+                        "reason": validation_result["reason"],
+                        "matched_patterns": len(validation_result.get("matched_patterns", [])),
+                    }
+                )
+
+            # Print status every 10 files
+            if (i + 1) % 10 == 0:
+                print(f"  Processed {i + 1}/{len(negative_files)} files...")
+
+        # Print results summary
+        print(f"\n{'=' * 70}")
+        print("CLASSIFICATION RESULTS")
+        print(f"{'=' * 70}\n")
+
+        print("Negative Type Distribution:")
+        for neg_type, count in negative_type_counts.most_common():
+            pct = count / len(negative_files) * 100
+            status = "(deleted)" if neg_type == "low_score" else ""
+            print(f"  {neg_type:20s}: {count:3d} ({pct:5.1f}%) {status}")
+
+        print(f"\n🗑️  Deleted {deleted_count}/{len(negative_files)} low_score files")
+        if auto_rename:
+            print(f"📝 Renamed {renamed_count}/{len(negative_files)} files to specific negative types")
+
+        # Print examples of each type (excluding deleted low_score)
+        print(f"\n{'=' * 70}")
+        print("EXAMPLES BY NEGATIVE TYPE (kept files only)")
+        print(f"{'=' * 70}\n")
+
+        for neg_type in ["error_page", "auth_required", "empty_shell"]:
+            examples = [r for r in results if r["negative_type"] == neg_type and not r.get("deleted", False)]
+            if examples:
+                print(f"\n{neg_type.upper()} ({len(examples)} examples):")
+                for example in examples[:3]:  # Show first 3
+                    print(f"  • {example['old_file']}")
+                    if example.get("renamed", False):
+                        print(f"    → Renamed to: {example['new_file']}")
+                    print(f"    Expected: {example['expected_type']}")
+                    print(f"    New prefix: {example['new_prefix']}")
+                    print(f"    Score: {example['score']:.2%}")
+                    print(f"    Reason: {example['reason']}")
+                    print(f"    Matched patterns: {example['matched_patterns']}")
+                    print()
+
+        # Save detailed results to JSON
+        output_file = self.negatives_dir.parent / "negative_reclassification_results.json"
+        with open(output_file, "w") as f:
+            json.dump(results, f, indent=2)
+
+        print(f"\n{'=' * 70}")
+        print("✅ Re-classification complete!")
+        print(f"Detailed results saved to: {output_file}")
+        print(f"{'=' * 70}\n")
 
 
 async def main():
@@ -786,8 +1317,19 @@ Examples:
         "--categories",
         "-c",
         nargs="+",
-        choices=["recipe", "product", "event", "pricing_table", "job_posting", "person"],
-        help="Categories to collect (default: all)",
+        choices=[
+            "recipe",
+            "product",
+            "event",
+            "pricing_table",
+            "job_posting",
+            "person",
+            "paywall_content",
+            "spa_heavy",
+            "authrequired",
+            "error_page",
+        ],
+        help="Categories to collect (default: all). Includes negative collectors: paywall_content, spa_heavy, authrequired, error_page",  # noqa: E501
     )
 
     args = parser.parse_args()
