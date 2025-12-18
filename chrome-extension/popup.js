@@ -63,7 +63,7 @@ async function handleLoadUrls() {
       openNextUrlBtn.disabled = false;
 
       // Save state
-      saveState();
+      await saveState();
     } else {
       throw new Error(result.error || 'Failed to load URLs');
     }
@@ -96,9 +96,6 @@ async function handleOpenNextUrl() {
   const nextUrl = urlList[currentUrlIndex];
   currentUrlIndex++;
 
-  // Open URL in a new tab
-  await chrome.tabs.create({ url: nextUrl, active: true });
-
   // Update status
   urlStatus.textContent = `📍 Opened URL ${currentUrlIndex}/${urlList.length}: ${nextUrl.substring(0, 60)}...`;
   urlStatus.className = 'url-status active';
@@ -109,8 +106,11 @@ async function handleOpenNextUrl() {
     openNextUrlBtn.disabled = true;
   }
 
-  // Save state
-  saveState();
+  // Save state BEFORE opening the tab (because opening with active:true will close the popup)
+  await saveState();
+
+  // Open URL in a new tab (this will close the popup)
+  await chrome.tabs.create({ url: nextUrl, active: true });
 }
 
 /**
@@ -241,19 +241,19 @@ function updateCharCount(count) {
 /**
  * Handle fragment type selection change
  */
-function handleFragmentTypeChange() {
+async function handleFragmentTypeChange() {
   const selectedType = fragmentTypeSelect.value;
 
   if (!selectedType) {
     jsonEditor.value = '';
     jsonEditor.placeholder = 'Select a fragment type to load the template...';
     updateSaveButtonState();
-    saveState();
+    await saveState();
     return;
   }
 
   loadTemplateWithExtraction();
-  saveState();
+  await saveState();
 }
 
 /**
@@ -290,16 +290,16 @@ function loadTemplateWithExtraction() {
 /**
  * Handle JSON editor input
  */
-function handleJsonEdit() {
+async function handleJsonEdit() {
   validateJSON();
   updateSaveButtonState();
-  saveState();
+  await saveState();
 }
 
 /**
  * Handle "Fix JSON" button click
  */
-function handleFixJson() {
+async function handleFixJson() {
   const jsonText = jsonEditor.value.trim();
 
   if (!jsonText) {
@@ -329,7 +329,7 @@ function handleFixJson() {
     // Validate and update state
     validateJSON();
     updateSaveButtonState();
-    saveState();
+    await saveState();
   } catch (error) {
     // If repair failed, show error
     showValidationError('✗ Could not fix JSON: ' + error.message);
@@ -480,7 +480,7 @@ async function handleSave() {
 /**
  * Handle clear button click
  */
-function handleClear(skipConfirmation = false) {
+async function handleClear(skipConfirmation = false) {
   if (skipConfirmation || confirm('Clear all fields and start over?')) {
     currentHTML = '';
     currentURL = '';
@@ -491,26 +491,24 @@ function handleClear(skipConfirmation = false) {
     jsonEditor.placeholder = 'Select a fragment type to load the template...';
     clearValidationMessage();
     updateSaveButtonState();
-    saveState();
+    await saveState();
   }
 }
 
 /**
  * Save state to chrome.storage
  */
-function saveState() {
-  chrome.storage.local.get('popupState', (result) => {
-    const state = result.popupState || {};
+async function saveState() {
+  const state = {
+    currentHTML: currentHTML,
+    currentURL: currentURL,
+    urlList: urlList,
+    currentUrlIndex: currentUrlIndex,
+    fragmentType: fragmentTypeSelect.value,
+    jsonEditorValue: jsonEditor.value
+  };
 
-    state.currentHTML = currentHTML;
-    state.currentURL = currentURL;
-    state.urlList = urlList;
-    state.currentUrlIndex = currentUrlIndex;
-    state.fragmentType = fragmentTypeSelect.value;
-    state.jsonEditorValue = jsonEditor.value;
-
-    chrome.storage.local.set({ popupState: state });
-  });
+  await chrome.storage.local.set({ popupState: state });
 }
 
 /**
@@ -524,7 +522,7 @@ async function restoreState() {
     // Restore URL list state
     if (state.urlList && state.urlList.length > 0) {
       urlList = state.urlList;
-      currentUrlIndex = state.currentUrlIndex || 0;
+      currentUrlIndex = state.currentUrlIndex ?? 0;
 
       urlStatus.textContent = `✓ Loaded ${urlList.length} URLs (${currentUrlIndex}/${urlList.length} opened)`;
       urlStatus.className = 'url-status active';
