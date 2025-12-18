@@ -10,6 +10,11 @@ chrome.runtime.onInstalled.addListener((details) => {
   }
 });
 
+// Handle extension icon click to open side panel
+chrome.action.onClicked.addListener((tab) => {
+  chrome.sidePanel.open({ windowId: tab.windowId });
+});
+
 // Handle messages from content script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'htmlSelected') {
@@ -27,13 +32,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       chrome.storage.local.set({ popupState: state }, () => {
         console.log(`HTML selection saved to storage (${state.fragmentCount} fragment(s))`);
 
-        // Open the popup to show the selected HTML
-        chrome.action.openPopup().then(() => {
-          console.log('Popup opened');
+        // Open the side panel to show the selected HTML
+        chrome.sidePanel.open({ windowId: sender.tab.windowId }).then(() => {
+          console.log('Side panel opened');
           sendResponse({ success: true });
         }).catch((error) => {
-          console.log('Could not open popup automatically:', error);
-          // Popup can only be opened programmatically in some contexts
+          console.log('Could not open side panel automatically:', error);
+          // Side panel can only be opened programmatically in some contexts
           // If it fails, the user can manually click the extension icon
           sendResponse({ success: true });
         });

@@ -566,6 +566,29 @@ async function restoreState() {
   }
 }
 
+// Listen for storage changes (when HTML is selected while side panel is open)
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local' && changes.popupState) {
+    const newState = changes.popupState.newValue;
+
+    // If new HTML was selected, update the UI
+    if (newState && newState.newSelectionMade && newState.currentHTML) {
+      currentHTML = newState.currentHTML;
+      currentURL = newState.currentURL;
+      displayHTML(newState.currentHTML, newState.fragmentCount || 1);
+
+      // If fragment type is selected, trigger auto-extraction
+      if (fragmentTypeSelect.value) {
+        loadTemplateWithExtraction();
+      }
+
+      // Clear the flag
+      newState.newSelectionMade = false;
+      chrome.storage.local.set({ popupState: newState });
+    }
+  }
+});
+
 // Initialize on load
 document.addEventListener('DOMContentLoaded', async () => {
   await restoreState();
