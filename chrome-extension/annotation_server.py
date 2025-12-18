@@ -26,6 +26,11 @@ class Annotation(BaseModel):
     timestamp: str
 
 
+class GoldenAnnotation(BaseModel):
+    example_html: str
+    expected_json: dict[str, Any]
+
+
 class SaveResponse(BaseModel):
     success: bool
     filename: str
@@ -66,34 +71,30 @@ async def get_urls():
     """Get list of domains from DOMAIN_LIST.md"""
     try:
         # Read domain list from DOMAIN_LIST.md
-        domain_file = Path(__file__).parent.parent / 'DOMAIN_LIST.md'
+        domain_file = Path(__file__).parent.parent / "DOMAIN_LIST.md"
 
         if not domain_file.exists():
             raise HTTPException(status_code=404, detail="DOMAIN_LIST.md not found")
 
         # Parse markdown to extract domains
         domains = []
-        with open(domain_file, 'r', encoding='utf-8') as f:
+        with open(domain_file, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 # Skip empty lines, headers, and comments
-                if not line or line.startswith('#') or line.startswith('**Note'):
+                if not line or line.startswith("#") or line.startswith("**Note"):
                     continue
                 # Extract domains from markdown list items
-                if line.startswith('-'):
+                if line.startswith("-"):
                     # Format: "- **domain.com** - Description" or "- domain.com - Description"
-                    parts = line.split('**')
-                    if len(parts) >= 3:
-                        # Extract from bold markdown
-                        domain = parts[1].strip()
-                    else:
-                        # Extract from plain text after dash
-                        domain = line.split('-', 1)[1].strip().split()[0]
+                    parts = line.split("**")
+                    # Extract from bold markdown or plain text after dash
+                    domain = parts[1].strip() if len(parts) >= 3 else line.split("-", 1)[1].strip().split()[0]
 
                     # Clean domain (remove trailing slashes, paths, etc.)
-                    domain = domain.split('/')[0].strip()
+                    domain = domain.split("/")[0].strip()
 
-                    if domain and '.' in domain:
+                    if domain and "." in domain:
                         # Add https:// prefix
                         url = f"https://{domain}"
                         if url not in domains:
@@ -107,7 +108,7 @@ async def get_urls():
         raise
     except Exception as e:
         print(f"✗ Error loading domains: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/counts", response_model=CountsResponse)
@@ -116,25 +117,25 @@ async def get_counts():
     try:
         # Initialize counts for all fragment types
         counts = {
-            'recipe': 0,
-            'event': 0,
-            'pricing_table': 0,
-            'job_posting': 0,
-            'person': 0,
-            'error_page': 0,
-            'auth_required': 0,
-            'empty_shell': 0
+            "recipe": 0,
+            "event": 0,
+            "pricing_table": 0,
+            "job_posting": 0,
+            "person": 0,
+            "error_page": 0,
+            "auth_required": 0,
+            "empty_shell": 0,
         }
 
         # Count existing annotations in data/manual directory
-        save_dir = Path(__file__).parent.parent / 'data' / 'manual'
+        save_dir = Path(__file__).parent.parent / "data" / "manual"
 
         if save_dir.exists():
-            for filepath in save_dir.glob('annotation_*.json'):
+            for filepath in save_dir.glob("annotation_*.json"):
                 try:
-                    with open(filepath, 'r', encoding='utf-8') as f:
+                    with open(filepath, encoding="utf-8") as f:
                         data = json.load(f)
-                        fragment_type = data.get('label', {}).get('type')
+                        fragment_type = data.get("label", {}).get("type")
                         if fragment_type in counts:
                             counts[fragment_type] += 1
                 except Exception as e:
@@ -146,27 +147,30 @@ async def get_counts():
 
     except Exception as e:
         print(f"✗ Error counting annotations: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.post("/save", response_model=SaveResponse)
 async def save_annotation(annotation: Annotation):
-    """Save annotation to data/manual directory"""
+    """Save annotation to data/manual directory in golden.jsonl format"""
     try:
         # Generate filename
-        fragment_type = annotation.label.get('type', 'unknown')
-        timestamp = annotation.timestamp.replace(':', '-').replace('.', '-')[:19]
+        fragment_type = annotation.label.get("type", "unknown")
+        timestamp = annotation.timestamp.replace(":", "-").replace(".", "-")[:19]
         filename = f"annotation_{fragment_type}_{timestamp}.json"
 
         # Save to data/manual directory
-        save_dir = Path(__file__).parent.parent / 'data' / 'manual'
+        save_dir = Path(__file__).parent.parent / "data" / "manual"
         save_dir.mkdir(parents=True, exist_ok=True)
 
         filepath = save_dir / filename
 
-        # Write JSON file
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(annotation.model_dump(), f, indent=2, ensure_ascii=False)
+        # Convert to golden.jsonl format
+        golden_format = GoldenAnnotation(example_html=annotation.html, expected_json=annotation.label)
+
+        # Write JSON file in golden.jsonl format
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(golden_format.model_dump(), f, indent=2, ensure_ascii=False)
 
         # Log success
         print(f"✓ Saved: {filename} ({len(annotation.html)} chars)")
@@ -177,7 +181,7 @@ async def save_annotation(annotation: Annotation):
 
     except Exception as e:
         print(f"✗ Error saving annotation: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/")
@@ -189,8 +193,8 @@ async def root():
         "endpoints": {
             "/urls": "GET - Fetch URL list",
             "/counts": "GET - Get annotation counts by type",
-            "/save": "POST - Save annotation"
-        }
+            "/save": "POST - Save annotation",
+        },
     }
 
 
@@ -218,13 +222,8 @@ def main():
     print("=" * 60)
     print()
 
-    uvicorn.run(
-        "annotation_server:app",
-        host="localhost",
-        port=8000,
-        reload=True
-    )
+    uvicorn.run("annotation_server:app", host="localhost", port=8000, reload=True)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
