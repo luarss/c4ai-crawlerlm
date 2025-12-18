@@ -10,8 +10,7 @@ const ANNOTATION_TEMPLATES = {
     total_time: "TODO",
     servings: "TODO",
     ingredients: ["TODO"],
-    instructions: ["TODO"],
-    rating: { score: "TODO", review_count: "TODO" }
+    instructions: ["TODO"]
   },
   event: {
     type: "event",
@@ -21,7 +20,6 @@ const ANNOTATION_TEMPLATES = {
     venue_name: "TODO",
     price: "TODO",
     organizer: "TODO",
-    attendee_count: "TODO",
     description: "TODO",
     event_type: "TODO"
   },
@@ -45,7 +43,6 @@ const ANNOTATION_TEMPLATES = {
     company: "TODO",
     location: "TODO",
     department: "TODO",
-    posted_date: "TODO",
     employment_type: "TODO",
     description: "TODO"
   },
