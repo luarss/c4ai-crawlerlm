@@ -1,10 +1,83 @@
-# Domain List for Manual Fragment Collection
+# Domain List for Automated Fragment Collection
 
-Based on the schemas defined in PROBLEM_STATEMENT_2.md, here are domains organized by fragment type for manual HTML collection.
+**Priority Order**: Domains are ordered by auto-extraction accuracy (see `EXTRACTION_TEST_RESULTS.md`).
 
-**Note**: Use the Chrome Extension in `chrome-extension/` directory to easily collect and label HTML fragments from these domains. See `chrome-extension/README.md` for installation and usage instructions.
+✅ **High Priority** (90-100% auto-extraction) - Collect these first
+⭐ **Medium Priority** (not yet tested) - Collect after validating high-priority schemas
+📦 **Lower Priority** (alternative schemas) - Defer or skip
 
-## Product Cards
+**Note**: Use `scripts/auto_extract_annotations.py` for automated extraction from these domains. See `NEXT_STEPS.md` for usage instructions.
+
+---
+
+## ✅ Job Postings (100% Auto-Extraction Accuracy)
+
+**Priority**: #1 - Perfect auto-extraction, abundant availability
+
+- **jobs.lever.co** - Startup job boards (e.g., jobs.lever.co/anthropic, jobs.lever.co/stripe)
+- **job-boards.greenhouse.io** - ATS job boards (e.g., boards.greenhouse.io/gitlab)
+- **linkedin.com/jobs** - Professional network
+- **indeed.com** - Job aggregator
+- **glassdoor.com** - Reviews + jobs
+- **workable.com** - Job board software
+- **angellist.com** - Startup jobs
+- **ycombinator.com/jobs** - YC startup jobs
+
+---
+
+## ✅ Recipe Cards (91% Auto-Extraction Accuracy)
+
+**Priority**: #2 - Excellent auto-extraction, very high availability
+
+- **allrecipes.com** - Community recipes (best coverage)
+- **foodnetwork.com** - Chef recipes
+- **tasty.co** - Video recipes
+- **bbcgoodfood.com** - UK recipes
+
+---
+
+## ✅ Event Listings (90% Auto-Extraction Accuracy)
+
+**Priority**: #3 - Excellent auto-extraction, high availability
+
+- **eventbrite.com** - Event discovery (best coverage)
+- **meetup.com** - Group events
+- **livenation.sg** - Listings
+- **sistic.com.sg** - Listings
+- **catch.sg** - Listings
+
+---
+
+## ⭐ Contact/Person Cards (Not Yet Tested)
+
+**Priority**: #4 - Medium priority, test extraction first
+
+- **linkedin.com** - Professional profiles (team pages)
+- **university faculty pages** - Academic profiles
+- **crunchbase.com** - Executive profiles
+- **angellist.com** - Startup team pages
+
+---
+
+## ⭐ Pricing Tables (Not Yet Tested)
+
+**Priority**: #5 - Medium-low priority, complex nested structure
+
+- **stripe.com/pricing** - Payment processing
+- **slack.com/pricing** - Collaboration tool
+- **notion.so/pricing** - Productivity tool
+- **github.com/pricing** - Code hosting
+- **atlassian.com** - Various tools (Jira, Confluence)
+- **hubspot.com/pricing** - Marketing software
+- **mailchimp.com/pricing** - Email marketing
+- **zoom.us/pricing** - Video conferencing
+- **airtable.com/pricing** - Database tool
+
+---
+
+## 📦 Product Cards (Alternative Schema - Lower Priority)
+
+**Priority**: #6 - Not in core schema set, defer until later
 
 - **amazon.com** - Various product pages
 - **etsy.com** - Handmade/vintage items
@@ -17,62 +90,11 @@ Based on the schemas defined in PROBLEM_STATEMENT_2.md, here are domains organiz
 - **wayfair.com** - Furniture
 - **shopify.com** - Independent stores
 
-## Event Listings
+---
 
-- **eventbrite.com** - Event discovery
-- **meetup.com** - Group events
-- **ticketmaster.com** - Concert/sports tickets
-- **stubhub.com** - Ticket resale
-- **seatgeek.com** - Events and tickets
-- **bandsintown.com** - Concert listings
+## 📦 Review Blocks (Alternative Schema - Lower Priority)
 
-## Contact/Person Cards
-
-- **linkedin.com** - Professional profiles (team pages)
-- **about.us pages** - Company team sections
-- **university faculty pages** - Academic profiles
-- **crunchbase.com** - Executive profiles
-- **angellist.com** - Startup team pages
-
-## Pricing Tables
-
-- **stripe.com/pricing** - Payment processing
-- **slack.com/pricing** - Collaboration tool
-- **notion.so/pricing** - Productivity tool
-- **github.com/pricing** - Code hosting
-- **atlassian.com** - Various tools (Jira, Confluence)
-- **hubspot.com/pricing** - Marketing software
-- **mailchimp.com/pricing** - Email marketing
-- **zoom.us/pricing** - Video conferencing
-- **airtable.com/pricing** - Database tool
-
-## Recipe Cards
-
-- **allrecipes.com** - Community recipes
-- **foodnetwork.com** - Chef recipes
-- **seriouseats.com** - Tested recipes
-- **bonappetit.com** - Magazine recipes
-- **tasty.co** - Video recipes
-- **cooking.nytimes.com** - NYT recipes
-- **delish.com** - Quick recipes
-- **bbcgoodfood.com** - UK recipes
-- **inspiredtaste.net** - Food blog
-- **loveandlemons.com** - Healthy recipes
-- **recipetineats.com** - Australian blog
-
-## Job Postings
-
-- **linkedin.com/jobs** - Professional network
-- **indeed.com** - Job aggregator
-- **glassdoor.com** - Reviews + jobs
-- **lever.co** - Startup job boards (jobs.lever.co/*)
-- **greenhouse.io** - ATS job boards (boards.greenhouse.io/*)
-- **workable.com** - Job board software
-- **angellist.com** - Startup jobs
-- **stackoverflow.com/jobs** - Developer jobs
-- **ycombinator.com/jobs** - YC startup jobs
-
-## Review Blocks
+**Priority**: #7 - Not in core schema set, defer until later
 
 - **amazon.com** - Product reviews
 - **yelp.com** - Business reviews
@@ -84,7 +106,11 @@ Based on the schemas defined in PROBLEM_STATEMENT_2.md, here are domains organiz
 - **imdb.com** - Movie reviews
 - **goodreads.com** - Book reviews
 
-## Article Metadata
+---
+
+## 📦 Article Metadata (Alternative Schema - Lower Priority)
+
+**Priority**: #8 - Not in core schema set, defer until later
 
 - **medium.com** - Blog posts
 - **dev.to** - Developer articles
@@ -93,14 +119,22 @@ Based on the schemas defined in PROBLEM_STATEMENT_2.md, here are domains organiz
 - **news.ycombinator.com** (linked articles)
 - **reddit.com** (linked articles)
 
-## Negative Examples: Error Pages
+---
+
+## ⚠️ Negative Examples: Error Pages
+
+**Priority**: Include ~10 examples for robustness
 
 Try any broken URL on major sites:
 - **github.com/404**
 - **stackoverflow.com/questions/99999999**
 - **twitter.com/nonexistent**
 
-## Negative Examples: Login Walls
+---
+
+## ⚠️ Negative Examples: Login Walls
+
+**Priority**: Include ~10 examples for robustness
 
 - **nytimes.com** - Paywalled articles
 - **wsj.com** - Subscription content
@@ -108,35 +142,73 @@ Try any broken URL on major sites:
 - **bloomberg.com** - Premium content
 - **ft.com** - Financial Times articles
 
-## Negative Examples: SPA Shells
+---
+
+## ⚠️ Negative Examples: SPA Shells
+
+**Priority**: Include ~10 examples for robustness
 
 - **react.dev** - React docs (view source)
 - **vuejs.org** - Vue docs
 - **angular.io** - Angular docs
 - Many modern web apps that heavily rely on JS
 
-## Collection Strategy
+---
 
-### Pro Tips
+## 🚀 Collection Strategy
 
-1. **Use View Source, not Inspect**: Get the raw HTML delivered by the server, not the DOM after JS execution
-2. **Look for RSS/API alternatives**: Some sites have cleaner structured data via feeds
-3. **Check Schema.org markup**: Many sites already have JSON-LD that can guide your schema design
-4. **Start with 2-3 domains per type**: You only need 50-100 base examples total
-5. **Prioritize diversity**: Different HTML patterns matter more than volume from one site
+### Automated Collection Workflow
+
+1. **Focus on High-Priority Schemas First** (✅ marked)
+   - Job postings: 50 URLs (100% auto-extraction)
+   - Recipes: 50 URLs (91% auto-extraction)
+   - Events: 30 URLs (90% auto-extraction)
+
+2. **Use Automated Script**:
+   ```bash
+   python scripts/auto_extract_annotations.py \
+     --urls data/job_urls.txt \
+     --schema job_posting \
+     --output data/manual
+   ```
+
+3. **Manual Review Pass** (~1-2 hours for 130 examples)
+   - Fix the ~5-10% errors
+   - Clean up UI text artifacts
+   - Verify all fields are correct
+
+4. **Test Medium-Priority Schemas** (⭐ marked)
+   - Run extraction on 5-10 examples first
+   - Measure accuracy
+   - If >70%, collect full 30-50 examples
+   - If <70%, improve extraction logic first
+
+5. **Generate Synthetic Variations**
+   - Use existing pipeline: `scripts/04_generate.py`
+   - Target 5,000 total training examples
 
 ### Target Metrics
 
-- **50-100 seed examples** across all fragment types
-- **5-10 real HTML examples** per fragment type
-- **Varying levels of noise** around each fragment
-- **Some malformed/messy HTML** for robustness
-- **Manually written expected JSON** for each example
+- **130+ seed examples** from high-priority schemas (job, recipe, event)
+- **90-100% auto-extraction accuracy** (validated)
+- **1-2 hours manual review** instead of 20+ hours annotation
+- **40x speedup** compared to manual collection
 
-### Next Steps
+### Quick Start
 
-1. Define exact JSON schemas for each fragment type
-2. Collect 5-10 seed examples per type from these domains
-3. Manually annotate the expected JSON output
-4. Generate synthetic variations to reach 5,000 training examples
-5. Proceed to fine-tuning
+See `NEXT_STEPS.md` for detailed instructions on:
+1. Creating URL lists
+2. Running automated extraction
+3. Reviewing and fixing errors
+4. Generating synthetic variations
+5. Converting to chat format
+
+### Why This Order Works
+
+1. **Job postings (100%)** - Perfect extraction, build confidence
+2. **Recipes (91%)** - Excellent extraction, easy to find
+3. **Events (90%)** - Excellent extraction, good availability
+4. **Person/Contact** - Test next, may need extraction tuning
+5. **Pricing tables** - Complex structure, test after simpler schemas
+6. **Product/Review/Article** - Alternative schemas, defer until core schemas complete
+7. **Negative examples** - Small set needed for robustness (~10 each)
