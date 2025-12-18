@@ -26,7 +26,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       // Save updated state
       chrome.storage.local.set({ popupState: state }, () => {
         console.log(`HTML selection saved to storage (${state.fragmentCount} fragment(s))`);
-        sendResponse({ success: true });
+
+        // Open the popup to show the selected HTML
+        chrome.action.openPopup().then(() => {
+          console.log('Popup opened');
+          sendResponse({ success: true });
+        }).catch((error) => {
+          console.log('Could not open popup automatically:', error);
+          // Popup can only be opened programmatically in some contexts
+          // If it fails, the user can manually click the extension icon
+          sendResponse({ success: true });
+        });
       });
     });
 

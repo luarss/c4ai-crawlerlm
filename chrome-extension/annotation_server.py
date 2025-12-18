@@ -135,7 +135,7 @@ async def get_counts():
                 try:
                     with open(filepath, encoding="utf-8") as f:
                         data = json.load(f)
-                        fragment_type = data.get("label", {}).get("type")
+                        fragment_type = data.get("expected_json", {}).get("type")
                         if fragment_type in counts:
                             counts[fragment_type] += 1
                 except Exception as e:
