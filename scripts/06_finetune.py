@@ -49,9 +49,6 @@ def format_chat_template(example, tokenizer):
 
 
 def main():
-    print("=" * 60)
-    print("CrawlerLM Fine-tuning Script")
-    print("=" * 60)
     print(f"Model: {MODEL_NAME}")
     print(f"Dataset: {DATASET_NAME}")
     print(f"Output: {OUTPUT_DIR}")
@@ -61,21 +58,20 @@ def main():
     print(f"Effective batch size: {BATCH_SIZE * GRADIENT_ACCUMULATION_STEPS}")
     print(f"Learning rate: {LEARNING_RATE}")
     print(f"Epochs: {NUM_EPOCHS}")
-    print("=" * 60)
 
-    print("\n[1/6] Loading tokenizer...")
+    print("Loading tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
 
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    print("\n[2/6] Loading dataset...")
+    print("Loading dataset...")
     dataset = load_dataset(DATASET_NAME)
-    print(f"  Train examples: {len(dataset['train'])}")
-    print(f"  Validation examples: {len(dataset['validation'])}")
-    print(f"  Test examples: {len(dataset['test'])}")
+    print(f"Train examples: {len(dataset['train'])}")
+    print(f"Validation examples: {len(dataset['validation'])}")
+    print(f"Test examples: {len(dataset['test'])}")
 
-    print("\n[3/6] Formatting dataset with chat template...")
+    print("Formatting dataset with chat template...")
     train_dataset = dataset["train"].map(
         lambda x: format_chat_template(x, tokenizer), remove_columns=dataset["train"].column_names
     )
@@ -83,10 +79,9 @@ def main():
         lambda x: format_chat_template(x, tokenizer), remove_columns=dataset["validation"].column_names
     )
 
-    print("  Example formatted text (first 500 chars):")
-    print(f"  {train_dataset[0]['text'][:500]}...")
+    print(f"Example formatted text (first chars): {train_dataset[0]['text'][:500]}...")
 
-    print("\n[4/6] Loading model...")
+    print("Loading model...")
     model = AutoModelForCausalLM.from_pretrained(
         MODEL_NAME,
         torch_dtype=torch.bfloat16,
@@ -99,7 +94,7 @@ def main():
     response_template = "<|im_start|>assistant"
     collator = DataCollatorForCompletionOnlyLM(response_template=response_template, tokenizer=tokenizer)
 
-    print("\n[5/6] Setting up training arguments...")
+    print("Setting up training arguments...")
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
         num_train_epochs=NUM_EPOCHS,
@@ -124,7 +119,7 @@ def main():
         hub_strategy="every_save",
     )
 
-    print("\n[6/6] Initializing SFT Trainer...")
+    print("Initializing SFT Trainer...")
     trainer = SFTTrainer(
         model=model,
         args=training_args,
@@ -136,25 +131,21 @@ def main():
         dataset_text_field="text",
     )
 
-    print("\n" + "=" * 60)
     print("Starting training...")
-    print("=" * 60 + "\n")
 
     trainer.train()
 
-    print("\n" + "=" * 60)
     print("Training complete! Saving final model...")
-    print("=" * 60)
 
     trainer.save_model(OUTPUT_DIR)
     tokenizer.save_pretrained(OUTPUT_DIR)
 
-    print("\nPushing to HuggingFace Hub...")
+    print("Pushing to HuggingFace Hub...")
     trainer.push_to_hub()
 
-    print("\n✓ Fine-tuning complete!")
-    print(f"  Model saved to: {OUTPUT_DIR}")
-    print(f"  Hub model: {HF_HUB_MODEL_ID}")
+    print("Fine-tuning complete!")
+    print(f"Model saved to: {OUTPUT_DIR}")
+    print(f"Hub model: {HF_HUB_MODEL_ID}")
 
 
 if __name__ == "__main__":

@@ -175,10 +175,6 @@ def evaluate_model(model, tokenizer, test_examples: list[dict[str, Any]], model_
 
 def print_comparison_table(base_results: dict, finetuned_results: dict):
     """Print a formatted comparison table."""
-    print("\n" + "=" * 80)
-    print("EVALUATION RESULTS COMPARISON")
-    print("=" * 80)
-
     metrics_order = ["rouge1", "rouge2", "rougeL", "levenshtein_normalized", "levenshtein_avg"]
     metric_names = {
         "rouge1": "ROUGE-1 F1",
@@ -188,8 +184,15 @@ def print_comparison_table(base_results: dict, finetuned_results: dict):
         "levenshtein_avg": "Avg Levenshtein Distance",
     }
 
-    print(f"\n{'Metric':<30} {'Base Model':<15} {'Fine-tuned':<15} {'Improvement':<15}")
-    print("-" * 80)
+    col_width_metric = 30
+    col_width_value = 15
+    metric_header = f"{'Metric':<{col_width_metric}}"
+    base_header = f"{'Base Model':<{col_width_value}}"
+    ft_header = f"{'Fine-tuned':<{col_width_value}}"
+    improvement_header = f"{'Improvement':<{col_width_value}}"
+    print(f"\n{metric_header} {base_header} {ft_header} {improvement_header}")
+    total_width = col_width_metric + col_width_value * 3
+    print("-" * total_width)
 
     for metric in metrics_order:
         base_val = base_results["metrics"][metric]
@@ -202,46 +205,38 @@ def print_comparison_table(base_results: dict, finetuned_results: dict):
             improvement = ((ft_val - base_val) / base_val) * 100 if base_val > 0 else 0
             improvement_str = f"{improvement:+.2f}%"
 
-        print(f"{metric_names[metric]:<30} {base_val:<15.4f} {ft_val:<15.4f} {improvement_str:<15}")
-
-    print("=" * 80)
+        metric_col = f"{metric_names[metric]:<{col_width_metric}}"
+        base_col = f"{base_val:<{col_width_value}.4f}"
+        ft_col = f"{ft_val:<{col_width_value}.4f}"
+        improvement_col = f"{improvement_str:<{col_width_value}}"
+        print(f"{metric_col} {base_col} {ft_col} {improvement_col}")
 
 
 def main():
     """Main evaluation pipeline."""
-    print("=" * 80)
-    print("CrawlerLM Model Comparison Evaluation (Transformers)")
-    print("=" * 80)
-
-    print(f"\nGPU available: {torch.cuda.is_available()}")
+    print(f"GPU available: {torch.cuda.is_available()}")
     if torch.cuda.is_available():
         print(f"GPU device: {torch.cuda.get_device_name(0)}")
         print(f"GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
 
     test_examples = load_test_data(max_examples=5)
 
-    print("\n" + "=" * 80)
-    print("PHASE 1: Evaluating Base Model")
-    print("=" * 80)
-
+    print("Evaluating Base Model")
     print("Loading base model...")
     base_tokenizer, base_model = load_base_model()
     base_results = evaluate_model(base_model, base_tokenizer, test_examples, "Qwen3-0.6B (Base)")
 
-    print("\nFreeing base model from memory...")
+    print("Freeing base model from memory...")
     del base_model
     del base_tokenizer
     torch.cuda.empty_cache()
 
-    print("\n" + "=" * 80)
-    print("PHASE 2: Evaluating Fine-tuned Model")
-    print("=" * 80)
-
+    print("Evaluating Fine-tuned Model")
     print("Loading fine-tuned model...")
     ft_tokenizer, ft_model = load_finetuned_model()
     finetuned_results = evaluate_model(ft_model, ft_tokenizer, test_examples, "CrawlerLM-Qwen3-0.6B")
 
-    print("\nFreeing fine-tuned model from memory...")
+    print("Freeing fine-tuned model from memory...")
     del ft_model
     del ft_tokenizer
     torch.cuda.empty_cache()
@@ -296,9 +291,7 @@ def main():
     with open(output_dir / "samples.json", "w") as f:
         json.dump(samples, f, indent=2)
 
-    print("\n" + "=" * 80)
-    print("SAMPLE OUTPUTS (5 examples)")
-    print("=" * 80)
+    print(f"SAMPLE OUTPUTS ({len(samples)} examples)")
     for idx, sample in enumerate(samples):
         user_msg = test_examples[idx]["messages"][0]["content"]
         html_start = user_msg.find("HTML:\n") + 6
@@ -309,11 +302,10 @@ def main():
         print(f"\n[REFERENCE]:\n{sample['reference']}")
         print(f"\n[BASE MODEL]:\n{sample['base_prediction']}")
         print(f"\n[FINE-TUNED]:\n{sample['finetuned_prediction']}")
-        print("-" * 80)
 
-    print(f"\n✓ Results saved to {output_dir}/comparison_summary.json")
-    print(f"✓ Samples saved to {output_dir}/samples.json")
-    print("\nEvaluation complete!")
+    print(f"Results saved to {output_dir}/comparison_summary.json")
+    print(f"Samples saved to {output_dir}/samples.json")
+    print("Evaluation complete!")
 
 
 if __name__ == "__main__":
