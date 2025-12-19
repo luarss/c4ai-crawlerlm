@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Local server for receiving annotations from Chrome extension.
 Saves annotations to ../data/manual/
@@ -100,14 +99,14 @@ async def get_urls():
                         if url not in domains:
                             domains.append(url)
 
-        print(f"📋 Loaded {len(domains)} domains from DOMAIN_LIST.md")
+        print(f"Loaded {len(domains)} domains from DOMAIN_LIST.md")
 
         return URLListResponse(success=True, urls=domains, count=len(domains))
 
     except HTTPException:
         raise
     except Exception as e:
-        print(f"✗ Error loading domains: {e}")
+        print(f"Error loading domains: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -142,11 +141,11 @@ async def get_counts():
                     print(f"Warning: Could not read {filepath.name}: {e}")
                     continue
 
-        print(f"📊 Annotation counts: {counts}")
+        print(f"Annotation counts: {counts}")
         return CountsResponse(success=True, counts=counts)
 
     except Exception as e:
-        print(f"✗ Error counting annotations: {e}")
+        print(f"Error counting annotations: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -172,15 +171,14 @@ async def save_annotation(annotation: Annotation):
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(golden_format.model_dump(), f, indent=2, ensure_ascii=False)
 
-        # Log success
-        print(f"✓ Saved: {filename} ({len(annotation.html)} chars)")
-        print(f"  Type: {fragment_type}")
-        print(f"  URL: {annotation.url[:80]}...")
+        print(f"Saved: {filename} ({len(annotation.html)} chars)")
+        print(f"Type: {fragment_type}")
+        print(f"URL: {annotation.url[:80]}...")
 
         return SaveResponse(success=True, filename=filename, path=str(filepath))
 
     except Exception as e:
-        print(f"✗ Error saving annotation: {e}")
+        print(f"Error saving annotation: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -202,25 +200,18 @@ def main():
     """Run server with uvicorn"""
     import uvicorn
 
-    print("=" * 60)
-    print("🚀 Annotation Server Running")
-    print("=" * 60)
+    print("Annotation Server Running")
     print("Listening on: http://localhost:8000")
     print("Saving to: ../data/manual/")
-    print()
     print("Endpoints:")
     print("  GET  /urls   - Fetch URL list")
     print("  GET  /counts - Get annotation counts by type")
     print("  POST /save   - Save annotation")
-    print()
     print("Instructions:")
     print("1. Keep this server running")
     print("2. Use Chrome extension to annotate HTML fragments")
     print("3. Annotations will be automatically saved here")
-    print()
     print("Press Ctrl+C to stop")
-    print("=" * 60)
-    print()
 
     uvicorn.run("annotation_server:app", host="localhost", port=8000, reload=True)
 
