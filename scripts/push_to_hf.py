@@ -1,7 +1,7 @@
 """
 Push the CrawlerLM dataset to HuggingFace Hub.
 
-This script uploads the train/test splits to HuggingFace Hub.
+This script uploads the chat-formatted splits to HuggingFace Hub.
 """
 
 import argparse
@@ -14,10 +14,6 @@ from huggingface_hub import HfApi
 TRAIN_CHAT_PATH = Path("data/processed/train_chat.jsonl")
 VAL_CHAT_PATH = Path("data/processed/val_chat.jsonl")
 TEST_CHAT_PATH = Path("data/processed/test_chat.jsonl")
-TRAIN_RAW_PATH = Path("data/processed/train.jsonl")
-VAL_RAW_PATH = Path("data/processed/val.jsonl")
-TEST_RAW_PATH = Path("data/processed/test.jsonl")
-GOLDEN_PATH = Path("data/processed/golden.jsonl")
 README_PATH = Path("data/README.md")
 
 
@@ -59,72 +55,25 @@ def create_chat_dataset() -> DatasetDict:
     return dataset_dict
 
 
-def create_raw_dataset() -> DatasetDict:
-    """Create HuggingFace DatasetDict from raw train/val/test splits."""
-    print("Loading raw train split...")
-    train_data = load_jsonl(TRAIN_RAW_PATH)
-    print(f"Loaded {len(train_data)} training examples")
-
-    print("Loading raw validation split...")
-    val_data = load_jsonl(VAL_RAW_PATH)
-    print(f"Loaded {len(val_data)} validation examples")
-
-    print("Loading raw test split...")
-    test_data = load_jsonl(TEST_RAW_PATH)
-    print(f"Loaded {len(test_data)} test examples")
-
-    train_dataset = Dataset.from_list(train_data)
-    val_dataset = Dataset.from_list(val_data)
-    test_dataset = Dataset.from_list(test_data)
-
-    dataset_dict = DatasetDict(
-        {
-            "train": train_dataset,
-            "validation": val_dataset,
-            "test": test_dataset,
-        }
-    )
-
-    return dataset_dict
-
-
-def create_combined_dataset() -> dict[str, DatasetDict]:
-    """Create both raw and chat-formatted datasets as separate configurations."""
-    return {
-        "raw": create_raw_dataset(),
-        "chat": create_chat_dataset(),
-    }
-
-
 def push_to_hub(
-    dataset_dict: DatasetDict | dict[str, DatasetDict],
+    dataset_dict: DatasetDict,
     repo_id: str,
     private: bool = False,
 ):
     """Push dataset to HuggingFace Hub.
 
     Args:
-        dataset_dict: Either a single DatasetDict or a dict of DatasetDicts (for configs)
+        dataset_dict: DatasetDict with train/validation/test splits
         repo_id: HuggingFace repository ID
         private: Whether to make the dataset private
     """
     print(f"Pushing dataset to HuggingFace Hub: {repo_id}")
     print(f"Private: {private}")
 
-    if isinstance(dataset_dict, dict):
-        for config_name, ds in dataset_dict.items():
-            print(f"Pushing configuration: {config_name}")
-            ds.push_to_hub(
-                repo_id=repo_id,
-                config_name=config_name,
-                private=private,
-            )
-    else:
-        # Single configuration
-        dataset_dict.push_to_hub(
-            repo_id=repo_id,
-            private=private,
-        )
+    dataset_dict.push_to_hub(
+        repo_id=repo_id,
+        private=private,
+    )
 
     print(f"Dataset successfully pushed to: https://huggingface.co/datasets/{repo_id}")
 
@@ -177,17 +126,14 @@ def main():
 
     print(f"Private: {args.private}")
 
-    dataset_dict = create_combined_dataset()
+    dataset_dict = create_chat_dataset()
 
     print("Dataset structure:")
-    print("Configurations: raw, chat")
-    for config_name, ds in dataset_dict.items():
-        print(f"{config_name}:")
-        print(f"  {ds}")
+    print(f"  {dataset_dict}")
 
     preview_length = 500
-    print("Example from raw config (first chars):")
-    example = dataset_dict["raw"]["train"][0]
+    print("Example from train split (first chars):")
+    example = dataset_dict["train"][0]
     example_str = str(example)
     print(example_str[:preview_length] + "..." if len(example_str) > preview_length else example_str)
 

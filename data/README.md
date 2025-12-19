@@ -1,7 +1,6 @@
 ---
 task_categories:
 - text-generation
-- information-extraction
 language:
 - en
 size_categories:
@@ -11,61 +10,32 @@ tags:
 - html-extraction
 - structured-data
 - synthetic-data
+- instruction-tuning
 ---
 
-# CrawlerLM: HTML Fragment to Structured JSON
+# CrawlerLM: HTML to JSON Extraction
 
-A synthetic dataset for training language models to extract structured JSON from HTML fragments across multiple schema types.
+A synthetic instruction-tuning dataset for training language models to extract structured JSON from HTML.
 
 ## Dataset Description
 
-This dataset contains HTML fragments paired with structured JSON annotations across three schema types: **recipes**, **job postings**, and **events**. It's designed for fine-tuning small language models to perform domain-specific information extraction from messy, real-world HTML.
+This dataset contains HTML paired with structured JSON extraction tasks in chat format. It's designed for fine-tuning small language models to perform structured data extraction from messy, real-world HTML across multiple domains.
 
 ### Key Features
 
-- **60 manually annotated base examples** from diverse web sources
-- **3 schema types** with domain-specific fields
-- **Synthetic augmentation** to 447+ training examples with realistic HTML variations
-- **Two configurations**: raw (HTML→JSON) and chat (instruction format)
-- **Token-filtered** (all examples ≤24K tokens)
+- **447 examples** in instruction-tuning chat format
+- **Real HTML** from diverse web sources (recipes, job postings, events)
+- **Synthetic augmentation** with realistic HTML variations
+- **Clean splits**: train (391) / validation (50) / test (6)
 
-## Configurations
+## Dataset Format
 
-### `raw` Configuration
-
-HTML fragment to JSON extraction format.
-
-**Fields**:
-- `example_html` (string): Raw HTML fragment
-- `expected_json` (dict): Structured extraction with schema-specific fields
-
-**Example**:
-```python
-{
-  "example_html": "<div class=\"recipe-card\">...</div>",
-  "expected_json": {
-    "type": "recipe",
-    "title": "Best Ever Macaroni Cheese",
-    "ingredients": ["500g macaroni", "200g cheddar", ...],
-    "instructions": ["Boil pasta", "Make sauce", ...],
-    "prep_time": "10 mins",
-    "cook_time": "20 mins",
-    ...
-  }
-}
-```
-
-**Splits**:
-- Train: 400 examples (augmented from 48 base examples)
-- Validation: 50 examples (augmented from 6 base examples)
-- Test: 6 examples (pristine, no augmentation)
-
-### `chat` Configuration
-
-Instruction-tuning format for training chat models.
+All examples are in instruction-tuning chat format with user/assistant messages.
 
 **Fields**:
 - `messages` (list): Conversational format with user/assistant roles
+  - User message: Instruction + HTML input
+  - Assistant message: JSON output
 
 **Example**:
 ```python
@@ -73,18 +43,18 @@ Instruction-tuning format for training chat models.
   "messages": [
     {
       "role": "user",
-      "content": "Extract structured data from the following HTML and return it as JSON.\n\nHTML:\n<div>...</div>"
+      "content": "Extract structured data from the following HTML and return it as JSON.\n\nHTML:\n<div class=\"recipe-card\">...</div>"
     },
     {
       "role": "assistant",
-      "content": "{\"type\": \"recipe\", \"title\": \"...\", ...}"
+      "content": "{\"type\": \"recipe\", \"title\": \"Best Ever Macaroni Cheese\", \"ingredients\": [\"500g macaroni\", ...], ...}"
     }
   ]
 }
 ```
 
 **Splits**:
-- Train: 391 examples (9 filtered out for exceeding token limit)
+- Train: 391 examples
 - Validation: 50 examples
 - Test: 6 examples
 
@@ -116,14 +86,11 @@ Instruction-tuning format for training chat models.
 
 ## Data Collection Process
 
-1. **Manual Annotation**: 61 HTML fragments manually annotated using custom Chrome extension
-2. **Quality Filtering**: Removed 1 example exceeding 24K token limit (60 examples remaining)
-3. **Stratified Split**: 80/10/10 split by schema type (48 train / 6 val / 6 test base examples)
-4. **Synthetic Augmentation**:
-   - Train: ~8 variations per base example (400 total)
-   - Val: ~8 variations per base example (50 total)
-   - Test: No augmentation (6 pristine examples)
-5. **Chat Conversion**: Convert to instruction-tuning format with token filtering
+1. **Manual Annotation**: HTML fragments manually annotated using custom Chrome extension
+2. **Quality Filtering**: Token limit filtering and validation
+3. **Stratified Split**: Train/val/test split by schema type before augmentation
+4. **Synthetic Augmentation**: Generate HTML variations while preserving JSON semantics
+5. **Chat Conversion**: Convert to instruction-tuning format with system prompt
 
 ### Augmentation Strategies
 
@@ -137,34 +104,17 @@ All augmentations preserve semantic content and ensure `expected_json` remains u
 
 ## Usage
 
-### Load Raw Configuration
+### Load Dataset
 
 ```python
 from datasets import load_dataset
 
-# Load raw HTML→JSON format
-dataset = load_dataset("espsluar/crawlerlm-html-to-json", "raw")
+# Load the dataset
+dataset = load_dataset("espsluar/crawlerlm-html-to-json")
 
 train_data = dataset["train"]
 val_data = dataset["validation"]
 test_data = dataset["test"]
-
-# Inspect example
-example = train_data[0]
-print(f"Schema type: {example['expected_json']['type']}")
-print(f"HTML length: {len(example['example_html'])} chars")
-print(f"Title: {example['expected_json']['title']}")
-```
-
-### Load Chat Configuration
-
-```python
-from datasets import load_dataset
-
-# Load chat format for instruction tuning
-dataset = load_dataset("espsluar/crawlerlm-html-to-json", "chat")
-
-train_data = dataset["train"]
 
 # Inspect example
 example = train_data[0]
@@ -175,6 +125,10 @@ print(f"Assistant response: {example['messages'][1]['content'][:100]}...")
 ### Filter by Schema Type
 
 ```python
+from datasets import load_dataset
+
+dataset = load_dataset("espsluar/crawlerlm-html-to-json")
+
 # Filter for only recipes
 recipes = dataset["train"].filter(
     lambda x: '"type": "recipe"' in x["messages"][1]["content"]
@@ -183,18 +137,58 @@ recipes = dataset["train"].filter(
 print(f"Recipe examples: {len(recipes)}")
 ```
 
+### Fine-tuning Example
+
+```python
+from datasets import load_dataset
+from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainingArguments
+
+# Load dataset
+dataset = load_dataset("espsluar/crawlerlm-html-to-json")
+
+# Load model and tokenizer
+model_name = "Qwen/Qwen2.5-0.5B-Instruct"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(model_name)
+
+# Apply chat template and tokenize
+def format_example(example):
+    text = tokenizer.apply_chat_template(
+        example["messages"],
+        tokenize=False
+    )
+    return tokenizer(text, truncation=True, max_length=4096)
+
+tokenized_dataset = dataset.map(format_example, remove_columns=["messages"])
+
+# Train
+trainer = Trainer(
+    model=model,
+    args=TrainingArguments(
+        output_dir="./crawlerlm-finetuned",
+        per_device_train_batch_size=1,
+        num_train_epochs=3,
+    ),
+    train_dataset=tokenized_dataset["train"],
+    eval_dataset=tokenized_dataset["validation"],
+)
+
+trainer.train()
+```
+
 ## Dataset Statistics
 
-| Split | Raw Examples | Chat Examples | Schema Distribution |
-|-------|--------------|---------------|---------------------|
-| Train | 400 | 391 | ~133 recipe, ~150 job_posting, ~117 event |
-| Validation | 50 | 50 | ~17 recipe, ~17 job_posting, ~16 event |
-| Test | 6 | 6 | 2 recipe, 2 job_posting, 2 event |
+| Split | Examples | Schema Distribution |
+|-------|----------|---------------------|
+| Train | 391 | ~133 recipe, ~150 job_posting, ~117 event |
+| Validation | 50 | ~17 recipe, ~17 job_posting, ~16 event |
+| Test | 6 | 2 recipe, 2 job_posting, 2 event |
+| **Total** | **447** | |
 
-**Schema Distribution** (base examples before augmentation):
-- Recipe: 19 examples (31.7%)
-- Job Posting: 22 examples (36.7%)
-- Event: 19 examples (31.7%)
+**Schema Distribution**:
+- Recipe: ~152 examples (34%)
+- Job Posting: ~169 examples (38%)
+- Event: ~135 examples (30%)
 
 ## Intended Use
 
@@ -217,7 +211,7 @@ print(f"Recipe examples: {len(recipes)}")
 - **Limited schema types**: Only 3 schema types (recipe, job_posting, event)
 - **English only**: All examples are from English-language websites
 - **Static HTML**: No JavaScript-rendered or dynamic content
-- **Token limit**: All examples ≤24K tokens (may not represent very long pages)
+- **Moderate dataset size**: 447 examples total (391 training examples)
 - **Augmentation artifacts**: Synthetic variations may not perfectly match real-world HTML diversity
 
 ## Ethical Considerations
