@@ -2,15 +2,15 @@
 
 **Priority Order**: Domains are ordered by auto-extraction accuracy (see `EXTRACTION_TEST_RESULTS.md`).
 
-✅ **High Priority** (90-100% auto-extraction) - Collect these first
-⭐ **Medium Priority** (not yet tested) - Collect after validating high-priority schemas
-📦 **Lower Priority** (alternative schemas) - Defer or skip
+**High Priority** (90-100% auto-extraction) - Collect these first
+**Medium Priority** (not yet tested) - Collect after validating high-priority schemas
+**Lower Priority** (alternative schemas) - Defer or skip
 
 **Note**: Use `scripts/auto_extract_annotations.py` for automated extraction from these domains. See `NEXT_STEPS.md` for usage instructions.
 
 ---
 
-## ✅ Job Postings (100% Auto-Extraction Accuracy)
+## Job Postings (100% Auto-Extraction Accuracy)
 
 **Priority**: #1 - Perfect auto-extraction, abundant availability
 
@@ -25,7 +25,7 @@
 
 ---
 
-## ✅ Recipe Cards (91% Auto-Extraction Accuracy)
+## Recipe Cards (91% Auto-Extraction Accuracy)
 
 **Priority**: #2 - Excellent auto-extraction, very high availability
 
@@ -36,7 +36,7 @@
 
 ---
 
-## ✅ Event Listings (90% Auto-Extraction Accuracy)
+## Event Listings (90% Auto-Extraction Accuracy)
 
 **Priority**: #3 - Excellent auto-extraction, high availability
 
@@ -48,7 +48,7 @@
 
 ---
 
-## ⭐ Contact/Person Cards (Not Yet Tested)
+## Contact/Person Cards (Not Yet Tested)
 
 **Priority**: #4 - Medium priority, test extraction first
 
@@ -59,7 +59,7 @@
 
 ---
 
-## ⭐ Pricing Tables (Not Yet Tested)
+## Pricing Tables (Not Yet Tested)
 
 **Priority**: #5 - Medium-low priority, complex nested structure
 
@@ -75,7 +75,7 @@
 
 ---
 
-## 📦 Product Cards (Alternative Schema - Lower Priority)
+## Product Cards (Alternative Schema - Lower Priority)
 
 **Priority**: #6 - Not in core schema set, defer until later
 
@@ -92,7 +92,7 @@
 
 ---
 
-## 📦 Review Blocks (Alternative Schema - Lower Priority)
+## Review Blocks (Alternative Schema - Lower Priority)
 
 **Priority**: #7 - Not in core schema set, defer until later
 
@@ -108,7 +108,7 @@
 
 ---
 
-## 📦 Article Metadata (Alternative Schema - Lower Priority)
+## Article Metadata (Alternative Schema - Lower Priority)
 
 **Priority**: #8 - Not in core schema set, defer until later
 
@@ -121,7 +121,7 @@
 
 ---
 
-## ⚠️ Negative Examples: Error Pages
+## Negative Examples: Error Pages
 
 **Priority**: Include ~10 examples for robustness
 
@@ -132,7 +132,7 @@ Try any broken URL on major sites:
 
 ---
 
-## ⚠️ Negative Examples: Login Walls
+## Negative Examples: Login Walls
 
 **Priority**: Include ~10 examples for robustness
 
@@ -144,7 +144,7 @@ Try any broken URL on major sites:
 
 ---
 
-## ⚠️ Negative Examples: SPA Shells
+## Negative Examples: SPA Shells
 
 **Priority**: Include ~10 examples for robustness
 
@@ -155,11 +155,11 @@ Try any broken URL on major sites:
 
 ---
 
-## 🚀 Collection Strategy
+## Collection Strategy
 
 ### Automated Collection Workflow
 
-1. **Focus on High-Priority Schemas First** (✅ marked)
+1. **Focus on High-Priority Schemas First** (High Priority marked)
    - Job postings: 50 URLs (100% auto-extraction)
    - Recipes: 50 URLs (91% auto-extraction)
    - Events: 30 URLs (90% auto-extraction)
@@ -177,7 +177,7 @@ Try any broken URL on major sites:
    - Clean up UI text artifacts
    - Verify all fields are correct
 
-4. **Test Medium-Priority Schemas** (⭐ marked)
+4. **Test Medium-Priority Schemas** (Medium Priority marked)
    - Run extraction on 5-10 examples first
    - Measure accuracy
    - If >70%, collect full 30-50 examples

@@ -4,17 +4,17 @@ A Chrome extension for manually annotating HTML fragments with structured JSON l
 
 ## Features
 
-- 📋 **URL List Loader**: Load and open domains from `DOMAIN_LIST.md` one by one
-- 🎯 **Multi-Fragment Selection**: Select multiple HTML elements from a page and combine them
-- 📄 **Full Page Capture**: Capture entire `<body>` HTML
-- 🏷️ **Schema Templates**: Pre-defined templates for recipe, event, job, person, pricing, and negative examples
-- 📊 **Progress Tracking**: Real-time count display showing progress toward target (e.g., "Recipe (3/10)")
-- 🤖 **Auto-Extraction**: Basic field pre-population from HTML structure
-- ✓ **JSON Validation**: Real-time validation with error messages
-- 🔧 **JSON Fixer**: Built-in one-click JSON repair for common errors (quotes, commas, trailing commas, etc.)
-- 💾 **Auto-Save**: Automatically saves to `./data/manual/` via local server
-- 🔄 **Auto-Clear**: Clears form after successful save for rapid batch annotation
-- 💾 **State Persistence**: Keeps your selections even when popup loses focus
+- **URL List Loader**: Load and open domains from `DOMAIN_LIST.md` one by one
+- **Multi-Fragment Selection**: Select multiple HTML elements from a page and combine them
+- **Full Page Capture**: Capture entire `<body>` HTML
+- **Schema Templates**: Pre-defined templates for recipe, event, job, person, pricing, and negative examples
+- **Progress Tracking**: Real-time count display showing progress toward target (e.g., "Recipe (3/10)")
+- **Auto-Extraction**: Basic field pre-population from HTML structure
+- **JSON Validation**: Real-time validation with error messages
+- **JSON Fixer**: Built-in one-click JSON repair for common errors (quotes, commas, trailing commas, etc.)
+- **Auto-Save**: Automatically saves to `./data/manual/` via local server
+- **Auto-Clear**: Clears form after successful save for rapid batch annotation
+- **State Persistence**: Keeps your selections even when popup loses focus
 
 ## Installation
 
@@ -38,7 +38,7 @@ python annotation_server.py
 
 You should see:
 ```
-🚀 Annotation Server Running
+Annotation Server Running
 Listening on: http://localhost:8000
 Saving to: ../data/manual/
 
@@ -117,7 +117,7 @@ Select the appropriate fragment type from the dropdown. Each category shows your
 - Auth Required (0/10)
 - Empty SPA Shell (1/10)
 
-Categories that reach 10 annotations are marked with a green checkmark: ✓ Recipe (10/10)
+Categories that reach 10 annotations are marked with a checkmark when complete: Recipe (10/10)
 
 ### Step 5: Review & Edit JSON
 
@@ -127,7 +127,7 @@ The JSON editor will auto-populate with:
 
 Review and edit the JSON to accurately represent the HTML content. Replace any "TODO" placeholders with actual values.
 
-**💡 JSON Errors?** Click the **🔧 Fix JSON** button to automatically repair common issues:
+**JSON Errors?** Click the **Fix JSON** button to automatically repair common issues:
 - Missing or incorrect quotes around keys
 - Single quotes → double quotes
 - Trailing commas
@@ -139,10 +139,10 @@ Review and edit the JSON to accurately represent the HTML content. Replace any "
 
 Click "Save Annotation" to automatically save to `./data/manual/`:
 
-- ✓ File saved as `annotation_<type>_<timestamp>.json`
-- ✓ Success message shows the filename
-- ✓ Form auto-clears after 1.5 seconds for rapid batch annotation
-- ✓ Server terminal shows live save confirmations
+- File saved as `annotation_<type>_<timestamp>.json`
+- Success message shows the filename
+- Form auto-clears after 1.5 seconds for rapid batch annotation
+- Server terminal shows live save confirmations
 
 The saved JSON format:
 ```json
@@ -221,7 +221,7 @@ Review and correct all auto-extracted values before saving.
 4. **Include noise**: Select fragments with surrounding HTML (ads, navigation, etc.)
 5. **Use keyboard shortcuts**: Press `Esc` to cancel selection mode
 6. **Batch annotation**: Keep the popup open and annotate multiple pages - the form auto-clears after each save
-7. **Focus on incomplete categories**: Categories with checkmarks (✓) have reached the target count
+7. **Focus on incomplete categories**: Categories marked as complete have reached the target count
 
 ## Troubleshooting
 
@@ -245,10 +245,10 @@ Review and correct all auto-extracted values before saving.
 **Save button disabled?**
 - Ensure you've selected HTML
 - Ensure you've chosen a fragment type
-- Check JSON is valid (no syntax errors) - use the 🔧 Fix JSON button if needed
+- Check JSON is valid (no syntax errors) - use the Fix JSON button if needed
 
 **JSON syntax errors?**
-- Click the **🔧 Fix JSON** button next to the "JSON Label" heading
+- Click the **Fix JSON** button next to the "JSON Label" heading
 - The extension will automatically repair common JSON issues
 - If automatic repair doesn't work, manually correct the JSON syntax
 

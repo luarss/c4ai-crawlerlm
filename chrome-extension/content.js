@@ -66,7 +66,7 @@ function updateSelectionBanner() {
 
   selectionBanner.innerHTML = `
     <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-      <span>🎯 Multi-Fragment Selection${countText} - Click elements to add</span>
+      <span>Multi-Fragment Selection${countText} - Click elements to add</span>
       <div style="display: flex; gap: 10px;">
         <button id="html-labeler-done" style="
           background: #10b981;

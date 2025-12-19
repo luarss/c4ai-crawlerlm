@@ -43,7 +43,7 @@ clearBtn.addEventListener('click', handleClear);
 async function handleLoadUrls() {
   try {
     // Show loading state
-    urlStatus.textContent = '📋 Loading URLs from server...';
+    urlStatus.textContent = 'Loading URLs from server...';
     urlStatus.className = 'url-status loading';
     loadUrlsBtn.disabled = true;
 
@@ -56,7 +56,7 @@ async function handleLoadUrls() {
       currentUrlIndex = 0;
 
       // Show success message
-      urlStatus.textContent = `✓ Loaded ${result.count} URLs (0/${result.count} opened)`;
+      urlStatus.textContent = `Loaded ${result.count} URLs (0/${result.count} opened)`;
       urlStatus.className = 'url-status active';
 
       // Enable "Open Next URL" button
@@ -72,9 +72,9 @@ async function handleLoadUrls() {
 
     // Check if server is running
     if (error.message.includes('fetch') || error.message.includes('NetworkError')) {
-      urlStatus.textContent = '✗ Server not running! Start: python annotation_server.py';
+      urlStatus.textContent = 'Error: Server not running! Start: python annotation_server.py';
     } else {
-      urlStatus.textContent = '✗ Failed to load URLs: ' + error.message;
+      urlStatus.textContent = 'Error: Failed to load URLs: ' + error.message;
     }
     urlStatus.className = 'url-status loading';
   } finally {
@@ -87,7 +87,7 @@ async function handleLoadUrls() {
  */
 async function handleOpenNextUrl() {
   if (currentUrlIndex >= urlList.length) {
-    urlStatus.textContent = '✓ All URLs opened! You\'ve completed the list.';
+    urlStatus.textContent = 'All URLs opened! You\'ve completed the list.';
     urlStatus.className = 'url-status active';
     openNextUrlBtn.disabled = true;
     return;
@@ -97,12 +97,12 @@ async function handleOpenNextUrl() {
   currentUrlIndex++;
 
   // Update status
-  urlStatus.textContent = `📍 Opened URL ${currentUrlIndex}/${urlList.length}: ${nextUrl.substring(0, 60)}...`;
+  urlStatus.textContent = `Opened URL ${currentUrlIndex}/${urlList.length}: ${nextUrl.substring(0, 60)}...`;
   urlStatus.className = 'url-status active';
 
   // Update button text if this is the last URL
   if (currentUrlIndex >= urlList.length) {
-    openNextUrlBtn.textContent = '✓ All URLs Opened';
+    openNextUrlBtn.textContent = 'All URLs Opened';
     openNextUrlBtn.disabled = true;
   }
 
@@ -157,7 +157,7 @@ function updateDropdownWithCounts() {
 
     // Update label with count and add checkmark if complete
     const isComplete = count >= TARGET_COUNT;
-    const checkmark = isComplete ? '✓ ' : '';
+    const checkmark = isComplete ? '[Complete] ' : '';
     option.textContent = `${checkmark}${baseLabel} (${count}/${TARGET_COUNT})`;
 
     // Add CSS class for styling
@@ -303,7 +303,7 @@ async function handleFixJson() {
   const jsonText = jsonEditor.value.trim();
 
   if (!jsonText) {
-    showValidationWarning('⚠️ No JSON to fix. The editor is empty.');
+    showValidationWarning('Warning: No JSON to fix. The editor is empty.');
     return;
   }
 
@@ -324,7 +324,7 @@ async function handleFixJson() {
     jsonEditor.value = prettified;
 
     // Show success message
-    showValidationSuccess('✓ JSON fixed successfully!');
+    showValidationSuccess('JSON fixed successfully!');
 
     // Validate and update state
     validateJSON();
@@ -332,7 +332,7 @@ async function handleFixJson() {
     await saveState();
   } catch (error) {
     // If repair failed, show error
-    showValidationError('✗ Could not fix JSON: ' + error.message);
+    showValidationError('Error: Could not fix JSON: ' + error.message);
   }
 }
 
@@ -353,14 +353,14 @@ function validateJSON() {
     // Check if it has "TODO" values
     const jsonString = JSON.stringify(parsed);
     if (jsonString.includes('"TODO"')) {
-      showValidationWarning('⚠️ Some fields still contain "TODO" placeholders');
+      showValidationWarning('Warning: Some fields still contain "TODO" placeholders');
       return true; // Still valid JSON, just a warning
     }
 
-    showValidationSuccess('✓ Valid JSON');
+    showValidationSuccess('Valid JSON');
     return true;
   } catch (error) {
-    showValidationError('✗ Invalid JSON: ' + error.message);
+    showValidationError('Error: Invalid JSON: ' + error.message);
     return false;
   }
 }
@@ -421,7 +421,7 @@ async function handleSave() {
   try {
     // Disable save button during save
     saveBtn.disabled = true;
-    saveBtn.textContent = '💾 Saving...';
+    saveBtn.textContent = 'Saving...';
 
     // Parse JSON
     const label = JSON.parse(jsonEditor.value);
@@ -447,7 +447,7 @@ async function handleSave() {
 
     if (response.ok && result.success) {
       // Show success message with filename
-      showValidationSuccess(`✓ Saved: ${result.filename}`);
+      showValidationSuccess(`Saved: ${result.filename}`);
 
       // Refresh counts
       await fetchCounts();
@@ -465,14 +465,14 @@ async function handleSave() {
 
     // Check if server is running
     if (error.message.includes('fetch') || error.message.includes('NetworkError')) {
-      showValidationError('✗ Server not running! Start: python annotation_server.py');
+      showValidationError('Error: Server not running! Start: python annotation_server.py');
     } else {
-      showValidationError('✗ Failed to save: ' + error.message);
+      showValidationError('Error: Failed to save: ' + error.message);
     }
   } finally {
     // Re-enable save button
     saveBtn.disabled = false;
-    saveBtn.textContent = '💾 Save Annotation';
+    saveBtn.textContent = 'Save Annotation';
     updateSaveButtonState(); // Recheck state
   }
 }
@@ -524,12 +524,12 @@ async function restoreState() {
       urlList = state.urlList;
       currentUrlIndex = state.currentUrlIndex ?? 0;
 
-      urlStatus.textContent = `✓ Loaded ${urlList.length} URLs (${currentUrlIndex}/${urlList.length} opened)`;
+      urlStatus.textContent = `Loaded ${urlList.length} URLs (${currentUrlIndex}/${urlList.length} opened)`;
       urlStatus.className = 'url-status active';
       openNextUrlBtn.disabled = currentUrlIndex >= urlList.length;
 
       if (currentUrlIndex >= urlList.length) {
-        openNextUrlBtn.textContent = '✓ All URLs Opened';
+        openNextUrlBtn.textContent = 'All URLs Opened';
       }
     }
 

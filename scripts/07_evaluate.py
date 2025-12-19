@@ -154,10 +154,10 @@ def evaluate_model(model, tokenizer, test_examples: list[dict[str, Any]], model_
         try:
             print("  Running inference...", flush=True)
             prediction = run_inference(model, tokenizer, html)
-            print(f"  ✓ Generated {len(prediction)} chars", flush=True)
+            print(f"  Generated {len(prediction)} chars", flush=True)
             predictions.append(prediction)
         except Exception as e:
-            print(f"  ✗ Error during inference: {e}", flush=True)
+            print(f"  Error during inference: {e}", flush=True)
             predictions.append("")
 
         references.append(reference)
