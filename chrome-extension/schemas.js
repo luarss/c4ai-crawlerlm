@@ -53,8 +53,7 @@ const ANNOTATION_TEMPLATES = {
     bio: "TODO",
     email: "TODO",
     phone: "TODO",
-    linkedin: "TODO",
-    image_url: "TODO"
+    linkedin: "TODO"
   },
   error_page: {
     type: "error_page",
@@ -111,10 +110,6 @@ function autoExtractFields(htmlString, fragmentType) {
   // Extract title/name from headings
   const titleText = getFirstText('h1') || getFirstText('h2') || getFirstText('h3');
 
-  // Extract first image
-  const firstImg = doc.querySelector('img');
-  const imageUrl = firstImg ? firstImg.src : null;
-
   // Type-specific extraction
   switch (fragmentType) {
     case 'recipe':
@@ -147,7 +142,6 @@ function autoExtractFields(htmlString, fragmentType) {
         extracted.description = descText;
       }
 
-      if (imageUrl) extracted.image_url = imageUrl;
       break;
 
     case 'event':
@@ -177,7 +171,6 @@ function autoExtractFields(htmlString, fragmentType) {
                        getFirstText('p');
       if (eventDesc && eventDesc.length > 20) extracted.description = eventDesc;
 
-      if (imageUrl) extracted.image_url = imageUrl;
       break;
 
     case 'pricing_table':
@@ -240,7 +233,6 @@ function autoExtractFields(htmlString, fragmentType) {
                      getFirstText('p');
       if (bioText && bioText.length > 30) extracted.bio = bioText;
 
-      if (imageUrl) extracted.image_url = imageUrl;
       break;
 
     case 'error_page':

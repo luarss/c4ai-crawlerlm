@@ -22,15 +22,19 @@ MAX_TOKENS = 24_000
 SCHEMA_PROMPTS = {
     "recipe": (
         "Return a JSON object with these fields: type, name, description, author, "
-        "prep_time, cook_time, total_time, servings, ingredients (array), instructions (array)"
+        "prep_time (string), cook_time (string), total_time (string), servings (string), "
+        "ingredients (array), instructions (array). "
+        "Use flat strings for time fields, not nested objects."
     ),
     "job_posting": (
         "Return a JSON object with these fields: type, title, company, location, "
-        "department, employment_type, description"
+        "department, employment_type, description. "
+        "Use flat strings for all fields."
     ),
     "event": (
-        "Return a JSON object with these fields: type, title, datetime, location, "
-        "venue_name, price, organizer, description, event_type, image_url"
+        "Return a JSON object with these fields: type, title, datetime (string), location, "
+        "venue_name, price (string), organizer, description, event_type. "
+        "Use flat strings for datetime and price fields, not nested objects."
     ),
 }
 
