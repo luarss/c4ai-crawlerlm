@@ -57,11 +57,16 @@ def main():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_name = f"qwen-crawlerlm-lora-{timestamp}"
 
+    # Generate branch name based on configuration
+    branch_name = f"seq{MAX_SEQ_LENGTH}-{timestamp}"
+
     # Configure Trackio for experiment tracking
     os.environ["TRACKIO_PROJECT_NAME"] = "crawlerlm"
     os.environ["TRACKIO_SPACE_ID"] = "espsluar/trackio"
 
     print(f"Run name: {run_name}")
+    print(f"Hub model ID: {HF_HUB_MODEL_ID}")
+    print(f"Hub branch: {branch_name}")
     print(f"Model: {MODEL_NAME}")
     print(f"Dataset: {DATASET_NAME}")
     print(f"Output: {OUTPUT_DIR}")
@@ -126,6 +131,8 @@ def main():
         report_to=["trackio"],
         run_name=run_name,
         hub_model_id=HF_HUB_MODEL_ID,
+        hub_private_repo=False,
+        hub_revision=branch_name,
         push_to_hub=True,
         hub_strategy="every_save",
         dataset_text_field="text",
@@ -151,8 +158,11 @@ def main():
     print("\nLoRA fine-tuning complete!")
     print(f"LoRA adapters saved to: {OUTPUT_DIR}")
     print(f"Hub model: {HF_HUB_MODEL_ID}")
-    print("\nTo use the model:")
+    print(f"Hub branch: {branch_name}")
+    print("\nTo use this specific version:")
     print("  from peft import AutoPeftModelForCausalLM")
+    print(f"  model = AutoPeftModelForCausalLM.from_pretrained('{HF_HUB_MODEL_ID}', revision='{branch_name}')")
+    print("\nOr use the main branch (latest):")
     print(f"  model = AutoPeftModelForCausalLM.from_pretrained('{HF_HUB_MODEL_ID}')")
 
 
