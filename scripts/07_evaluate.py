@@ -65,7 +65,7 @@ def load_base_model(model_id: str = "Qwen/Qwen3-0.6B"):
     return tokenizer, model
 
 
-def load_finetuned_model(base_model_id: str = "Qwen/Qwen3-0.6B", adapter_id: str = "espsluar/qwen-crawlerlm-sft"):
+def load_finetuned_model(base_model_id: str = "Qwen/Qwen3-0.6B", adapter_id: str = "espsluar/qwen-crawlerlm-lora"):
     """Load fine-tuned model with LoRA adapter."""
     print(f"Loading fine-tuned model: {base_model_id} + {adapter_id}")
 
@@ -83,9 +83,23 @@ def load_finetuned_model(base_model_id: str = "Qwen/Qwen3-0.6B", adapter_id: str
 
 
 def run_inference(model, tokenizer, html: str, max_new_tokens: int = 1024) -> str:
-    """Run model inference on HTML input."""
-    prompt = f"Extract structured data from the following HTML and return it as JSON.\n\nHTML:\n{html}"
+    """Run model inference on HTML input using chat template."""
+    messages = [
+        {
+            "role": "system",
+            "content": "/no_think"
+        },
+        {
+            "role": "user",
+            "content": f"Extract structured data from the following HTML and return it as JSON.\n\nHTML:\n{html}"
+        }
+    ]
 
+    prompt = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True
+    )
     inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=8192).to(model.device)
 
     with torch.no_grad():
@@ -254,7 +268,7 @@ def main():
         },
         "finetuned_model": {
             "name": finetuned_results["model_name"],
-            "id": "espsluar/qwen-crawlerlm-sft",
+            "id": "espsluar/qwen-crawlerlm-lora",
             "metrics": finetuned_results["metrics"],
         },
         "improvements": {},
