@@ -82,24 +82,11 @@ def load_finetuned_model(base_model_id: str = "Qwen/Qwen3-0.6B", adapter_id: str
     return tokenizer, model
 
 
-def run_inference(model, tokenizer, html: str, max_new_tokens: int = 1024) -> str:
-    """Run model inference on HTML input using chat template."""
-    messages = [
-        {
-            "role": "system",
-            "content": "/no_think"
-        },
-        {
-            "role": "user",
-            "content": f"Extract structured data from the following HTML and return it as JSON.\n\nHTML:\n{html}"
-        }
-    ]
+def run_inference(model, tokenizer, user_prompt: str, max_new_tokens: int = 8192) -> str:
+    """Run model inference with user prompt using chat template."""
+    messages = [{"role": "user", "content": user_prompt}]
 
-    prompt = tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True
-    )
+    prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=8192).to(model.device)
 
     with torch.no_grad():
@@ -112,6 +99,18 @@ def run_inference(model, tokenizer, html: str, max_new_tokens: int = 1024) -> st
         )
 
     generated_text = tokenizer.decode(outputs[0][inputs.input_ids.shape[1] :], skip_special_tokens=True)
+
+    # Post-process: Remove <think> tags and their content if present
+    # The model was trained with thinking enabled, so it may generate these tags
+    if "<think>" in generated_text:
+        # Extract only content after </think>
+        parts = generated_text.split("</think>")
+        if len(parts) > 1:  # noqa: SIM108
+            generated_text = parts[1].strip()
+        else:
+            # If no closing tag, remove everything from <think> onward
+            generated_text = generated_text.split("<think>")[0].strip()
+
     return generated_text.strip()
 
 
@@ -157,9 +156,9 @@ def evaluate_model(model, tokenizer, test_examples: list[dict[str, Any]], model_
     for idx, example in enumerate(test_examples):
         print(f"[{idx + 1}/{len(test_examples)}] Processing example...", flush=True)
 
-        user_msg = example["messages"][0]["content"]
-        html_start = user_msg.find("HTML:\n") + 6
-        html = user_msg[html_start:]
+        user_prompt = example["messages"][0]["content"]
+        html_start = user_prompt.find("HTML:\n") + 6
+        html = user_prompt[html_start:]
 
         print(f"  HTML length: {len(html)} chars", flush=True)
 
@@ -167,7 +166,7 @@ def evaluate_model(model, tokenizer, test_examples: list[dict[str, Any]], model_
 
         try:
             print("  Running inference...", flush=True)
-            prediction = run_inference(model, tokenizer, html)
+            prediction = run_inference(model, tokenizer, user_prompt)
             print(f"  Generated {len(prediction)} chars", flush=True)
             predictions.append(prediction)
         except Exception as e:
