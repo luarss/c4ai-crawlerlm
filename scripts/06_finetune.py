@@ -32,15 +32,15 @@ DATASET_NAME = "espsluar/crawlerlm-html-to-json"
 OUTPUT_DIR = "./results/qwen-crawlerlm-lora"
 HF_HUB_MODEL_ID = "espsluar/qwen-crawlerlm-lora"
 
-MAX_SEQ_LENGTH = 16384
-BATCH_SIZE = 2
-GRADIENT_ACCUMULATION_STEPS = 8
-LEARNING_RATE = 2e-4  # Higher learning rate for LoRA
+MAX_SEQ_LENGTH = 4096
+BATCH_SIZE = 1
+GRADIENT_ACCUMULATION_STEPS = 16
+LEARNING_RATE = 2e-4
 NUM_EPOCHS = 3
 WARMUP_RATIO = 0.1
-LOGGING_STEPS = 1  # Log every step for visibility
-SAVE_STEPS = 25  # Save checkpoints every 25 steps
-EVAL_STEPS = 25  # Evaluate every 25 steps
+LOGGING_STEPS = 1
+SAVE_STEPS = 25
+EVAL_STEPS = 25
 
 
 def format_chat_template(example, tokenizer):
@@ -136,6 +136,7 @@ def main():
         push_to_hub=True,
         hub_strategy="every_save",
         dataset_text_field="text",
+        max_length=MAX_SEQ_LENGTH,
     )
 
     print("Initializing SFT Trainer with LoRA (battle-tested approach)...")
@@ -159,11 +160,6 @@ def main():
     print(f"LoRA adapters saved to: {OUTPUT_DIR}")
     print(f"Hub model: {HF_HUB_MODEL_ID}")
     print(f"Hub branch: {branch_name}")
-    print("\nTo use this specific version:")
-    print("  from peft import AutoPeftModelForCausalLM")
-    print(f"  model = AutoPeftModelForCausalLM.from_pretrained('{HF_HUB_MODEL_ID}', revision='{branch_name}')")
-    print("\nOr use the main branch (latest):")
-    print(f"  model = AutoPeftModelForCausalLM.from_pretrained('{HF_HUB_MODEL_ID}')")
 
 
 if __name__ == "__main__":
