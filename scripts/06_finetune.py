@@ -32,7 +32,7 @@ DATASET_NAME = "espsluar/crawlerlm-html-to-json"
 OUTPUT_DIR = "./results/qwen-crawlerlm-lora"
 HF_HUB_MODEL_ID = "espsluar/qwen-crawlerlm-lora"
 
-MAX_SEQ_LENGTH = 8192
+MAX_SEQ_LENGTH = 16384
 BATCH_SIZE = 2
 GRADIENT_ACCUMULATION_STEPS = 8
 LEARNING_RATE = 2e-4  # Higher learning rate for LoRA
