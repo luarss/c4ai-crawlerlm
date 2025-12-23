@@ -65,9 +65,16 @@ def load_base_model(model_id: str = "Qwen/Qwen3-0.6B"):
     return tokenizer, model
 
 
-def load_finetuned_model(base_model_id: str = "Qwen/Qwen3-0.6B", adapter_id: str = "espsluar/qwen-crawlerlm-lora"):
+def load_finetuned_model(
+    base_model_id: str = "Qwen/Qwen3-0.6B",
+    adapter_id: str = "espsluar/qwen-crawlerlm-lora",
+    revision: str | None = None,
+):
     """Load fine-tuned model with LoRA adapter."""
-    print(f"Loading fine-tuned model: {base_model_id} + {adapter_id}")
+    if revision:
+        print(f"Loading fine-tuned model: {base_model_id} + {adapter_id} (revision: {revision})")
+    else:
+        print(f"Loading fine-tuned model: {base_model_id} + {adapter_id}")
 
     tokenizer = AutoTokenizer.from_pretrained(base_model_id)
     base_model = AutoModelForCausalLM.from_pretrained(
@@ -76,7 +83,7 @@ def load_finetuned_model(base_model_id: str = "Qwen/Qwen3-0.6B", adapter_id: str
         device_map="auto",
     )
 
-    model = PeftModel.from_pretrained(base_model, adapter_id)
+    model = PeftModel.from_pretrained(base_model, adapter_id, revision=revision)
 
     print(f"  Model loaded on: {model.device}")
     return tokenizer, model
@@ -99,6 +106,14 @@ def run_inference(model, tokenizer, user_prompt: str, max_new_tokens: int = 8192
         )
 
     generated_text = tokenizer.decode(outputs[0][inputs.input_ids.shape[1] :], skip_special_tokens=True)
+
+    # DEBUG: Print raw generation info
+    num_generated_tokens = outputs[0].shape[0] - inputs.input_ids.shape[1]
+    print(
+        f"  DEBUG: Generated {num_generated_tokens} tokens, {len(generated_text)} chars (before stripping)", flush=True
+    )
+    if len(generated_text) < 200:
+        print(f"  DEBUG: Raw output: {generated_text!r}", flush=True)
 
     # Post-process: Remove <think> tags and their content if present
     # The model was trained with thinking enabled, so it may generate these tags
@@ -227,6 +242,11 @@ def print_comparison_table(base_results: dict, finetuned_results: dict):
 
 def main():
     """Main evaluation pipeline."""
+    import os
+
+    # Get revision from environment variable or use None for main branch
+    revision = os.getenv("ADAPTER_REVISION", None)
+
     print(f"GPU available: {torch.cuda.is_available()}")
     if torch.cuda.is_available():
         print(f"GPU device: {torch.cuda.get_device_name(0)}")
@@ -246,8 +266,9 @@ def main():
 
     print("Evaluating Fine-tuned Model")
     print("Loading fine-tuned model...")
-    ft_tokenizer, ft_model = load_finetuned_model()
-    finetuned_results = evaluate_model(ft_model, ft_tokenizer, test_examples, "CrawlerLM-Qwen3-0.6B")
+    ft_tokenizer, ft_model = load_finetuned_model(revision=revision)
+    model_name = f"CrawlerLM-Qwen3-0.6B ({revision})" if revision else "CrawlerLM-Qwen3-0.6B"
+    finetuned_results = evaluate_model(ft_model, ft_tokenizer, test_examples, model_name)
 
     print("Freeing fine-tuned model from memory...")
     del ft_model
@@ -268,6 +289,7 @@ def main():
         "finetuned_model": {
             "name": finetuned_results["model_name"],
             "id": "espsluar/qwen-crawlerlm-lora",
+            "revision": revision,
             "metrics": finetuned_results["metrics"],
         },
         "improvements": {},
