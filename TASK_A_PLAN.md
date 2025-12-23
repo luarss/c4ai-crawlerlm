@@ -86,15 +86,15 @@ schema/
 
 ---
 
-## 5. Create HTML → JSON extraction baseline (✅ COMPLETED)
+## 5. Create HTML → JSON extraction baseline (COMPLETED)
 
 **Goal**: Generate initial high-quality training examples
 
 **Completed Pipeline**:
-- ✅ 00_sample.py - Sampled ~400 diverse URLs from Common Crawl
-- ✅ 01_filter.py - Selected best 50 URLs based on quality metrics
-- ✅ 02_fetch.py - Extracted structured JSON using Exa API
-- ✅ 03_join.py - Created golden.jsonl with matched HTML+JSON pairs
+- 00_sample.py - Sampled ~400 diverse URLs from Common Crawl
+- 01_filter.py - Selected best 50 URLs based on quality metrics
+- 02_fetch.py - Extracted structured JSON using Exa API
+- 03_join.py - Created golden.jsonl with matched HTML+JSON pairs
 
 **Current Dataset** (`data/processed/golden.jsonl`):
 - 50+ real-world HTML examples from diverse domains
@@ -109,7 +109,7 @@ schema/
 
 ---
 
-## 6. Pilot Dataset Generation (⏳ CURRENT PHASE)
+## 6. Pilot Dataset Generation (CURRENT PHASE)
 
 **Goal**: Create pilot dataset with iterative validation approach
 
@@ -140,26 +140,26 @@ Total: 344 examples for pilot
 **Augmentation Strategies** (Conservative):
 
 *High-Value Augmentations (Use)*:
-- ✅ **Structural variations**: Wrapper divs (1-3 layers), change nesting depth
-- ✅ **Attribute noise**: Random classes, IDs, data-* attributes (20-30% probability)
-- ✅ **Template variations**: Swap semantically equivalent tags (div ↔ section, span ↔ em)
-- ✅ **HTML comments**: Inject developer comments (3-10 per document)
-- ✅ **Whitespace variations**: Prettify vs. minify
+- **Structural variations**: Wrapper divs (1-3 layers), change nesting depth
+- **Attribute noise**: Random classes, IDs, data-* attributes (20-30% probability)
+- **Template variations**: Swap semantically equivalent tags (div ↔ section, span ↔ em)
+- **HTML comments**: Inject developer comments (3-10 per document)
+- **Whitespace variations**: Prettify vs. minify
 
 *Medium-Value Augmentations (Test in Ablation)*:
-- ⚠️ **Style injection**: Inline CSS (may be irrelevant if model should ignore styling)
-- ⚠️ **Content perturbations**: Only if text variety helps (likely not needed for extraction)
+- **Style injection**: Inline CSS (may be irrelevant if model should ignore styling)
+- **Content perturbations**: Only if text variety helps (likely not needed for extraction)
 
 *Risky Augmentations (Avoid)*:
-- ❌ **HTML corruption**: Missing tags, malformed attributes (unrealistic for production)
-- ❌ **CDATA sections**: Rare in modern HTML
+- **HTML corruption**: Missing tags, malformed attributes (unrealistic for production)
+- **CDATA sections**: Rare in modern HTML
 
 **Validation Requirements**:
-- ✓ All JSONs match Exa schema (8 required fields)
-- ✓ HTML parseable by BeautifulSoup
-- ✓ `expected_json` identical across all variations of same base
-- ✓ Manual spot-check 20 random samples
-- ✓ HTML length within reasonable range (10K-50K characters)
+- All JSONs match Exa schema (8 required fields)
+- HTML parseable by BeautifulSoup
+- `expected_json` identical across all variations of same base
+- Manual spot-check 20 random samples
+- HTML length within reasonable range (10K-50K characters)
 
 ### Phase 2: Pilot Training & Ablation (Task B Preview)
 
@@ -207,10 +207,10 @@ Total: 344 examples for pilot
 **Goal**: Generate and validate complete dataset (ONLY after pilot succeeds)
 
 **Preconditions** (Must be met before full generation):
-- ✓ Pilot training (Phase 2) shows improvement over baseline
-- ✓ Ablation studies identify effective augmentation strategies
-- ✓ Validation performance has NOT plateaued
-- ✓ Training/validation gap is reasonable (no severe overfitting)
+- Pilot training (Phase 2) shows improvement over baseline
+- Ablation studies identify effective augmentation strategies
+- Validation performance has NOT plateaued
+- Training/validation gap is reasonable (no severe overfitting)
 
 **Generation** (If validated):
 - 33 training base examples × ~150 variations = ~5000 training examples
@@ -244,10 +244,10 @@ Test:       7 real examples (NO augmentation)
 ```
 
 **Critical Rules**:
-- ❌ NEVER augment validation or test sets
-- ✅ Validation/test must remain REAL examples only
-- ✅ Split base examples BEFORE any augmentation
-- ✅ `expected_json` must be identical across all variations of same base
+- NEVER augment validation or test sets
+- Validation/test must remain REAL examples only
+- Split base examples BEFORE any augmentation
+- `expected_json` must be identical across all variations of same base
 
 **Important**: The `expected_json` field uses the exact Exa schema with fields: `url`, `title`, `text`, `author`, `published_date`, `image`, `favicon`, `id`
 
@@ -255,30 +255,30 @@ Test:       7 real examples (NO augmentation)
 
 ## Key Success Criteria
 
-**Phase 1: Base Dataset (✅ COMPLETE)**
-- ✅ 47 unique real HTML examples from diverse Common Crawl domains
-- ✅ Stable, well-defined JSON schema from Exa API
-- ✅ Messy, realistic HTML (not sanitized templates)
-- ✅ Consistent `example_html` → `expected_json` format
+**Phase 1: Base Dataset (COMPLETE)**
+- 47 unique real HTML examples from diverse Common Crawl domains
+- Stable, well-defined JSON schema from Exa API
+- Messy, realistic HTML (not sanitized templates)
+- Consistent `example_html` → `expected_json` format
 
-**Phase 2: Pilot Dataset (⏳ CURRENT)**
-- ⏳ 344 pilot examples (330 synthetic train + 7 real val + 7 real test)
-- ⏳ Split BEFORE augmentation to prevent data leakage
-- ⏳ Validation: Schema consistency, HTML parseable, spot-check quality
-- ⏳ Ablation-ready structure for Task B testing
+**Phase 2: Pilot Dataset (CURRENT)**
+- 344 pilot examples (330 synthetic train + 7 real val + 7 real test)
+- Split BEFORE augmentation to prevent data leakage
+- Validation: Schema consistency, HTML parseable, spot-check quality
+- Ablation-ready structure for Task B testing
 
 **Phase 3: Pilot Training Validation (TODO - Task B)**
-- ⬜ Baseline model trained on 33 real examples only
-- ⬜ Augmented model trained on 330 synthetic examples
-- ⬜ Ablation studies per augmentation type
-- ⬜ Augmented model beats baseline on real validation data
-- ⬜ Identified effective augmentation strategies
+- Baseline model trained on 33 real examples only
+- Augmented model trained on 330 synthetic examples
+- Ablation studies per augmentation type
+- Augmented model beats baseline on real validation data
+- Identified effective augmentation strategies
 
 **Phase 4: Full Dataset (TODO - Only if Phase 3 succeeds)**
-- ⬜ ~5000 training examples using validated augmentation strategies
-- ⬜ Same 7 real validation + 7 real test examples (unchanged)
-- ⬜ Final validation: Schema, parsability, diversity metrics
-- ⬜ Ready for full-scale fine-tuning in Task B
+- ~5000 training examples using validated augmentation strategies
+- Same 7 real validation + 7 real test examples (unchanged)
+- Final validation: Schema, parsability, diversity metrics
+- Ready for full-scale fine-tuning in Task B
 
 ---
 

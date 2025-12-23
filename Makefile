@@ -10,3 +10,7 @@ format:
 .PHONY: check
 check:
 	@ruff check .
+
+.PHONY: annotate
+annotate:
+	@uv run chrome-extension/annotation_server.py

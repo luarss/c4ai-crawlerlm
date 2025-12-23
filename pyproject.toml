@@ -12,6 +12,7 @@ dependencies = [
     "beautifulsoup4>=4.12.0",
     "tqdm>=4.66.0",
     "transformers>=4.57.3",
+    "scikit-learn>=1.8.0",
 ]
 
 [project.optional-dependencies]
@@ -25,6 +26,8 @@ dev = [
     "huggingface-hub>=0.36.0",
     "datasets>=4.4.1",
     "ruff>=0.14.8",
+    "fastapi>=0.124.4",
+    "uvicorn>=0.34.0",
 ]
 
 [tool.ruff]

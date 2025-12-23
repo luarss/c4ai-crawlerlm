@@ -8,6 +8,17 @@ CrawlerLM is a synthetic dataset generation and model fine-tuning pipeline for t
 
 **Current Status**: Task A (synthetic dataset generation) is complete with train/val/test splits generated. Task B (fine-tuning) and Task C (evaluation) are next phases.
 
+## Code Style Guidelines
+
+**IMPORTANT: NO EMOJIS IN CODE OR DOCUMENTATION**
+
+This repository has a strict no-emoji policy:
+- NEVER use emojis in Python code, JavaScript, HTML, or any source files
+- NEVER use emojis in markdown documentation (.md files)
+- NEVER use emojis in comments, docstrings, or commit messages
+- Use plain text alternatives instead (e.g., "Success:", "Error:", "Warning:")
+- Exception: Data files (JSON annotations, HTML files in `/data/`) may contain emojis if they are part of actual webpage content being processed
+
 ## Development Commands
 
 ### Environment Setup
@@ -221,6 +232,8 @@ This project implements Task A from the problem statement:
 - Programmatic synthetic variations to reach 5k examples
 - Stable JSON schema (Exa format with 8 required fields)
 - Train/val/test splits with proper data leakage prevention
+- `hf jobs uv run --flavor t4-small|t4-medium --secrets HF_TOKEN scripts/06_finetune.py`
+- `hf jobs uv run --flavor t4-small|t4-medium --secrets HF_TOKEN scripts/07_evaluate.py`
 
 **Next phases**:
 - Task B: Fine-tune a small model (e.g., Qwen 0.6B) using HuggingFace training pipeline
