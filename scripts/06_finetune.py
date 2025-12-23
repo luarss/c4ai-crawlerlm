@@ -23,6 +23,7 @@ import os
 from datetime import datetime
 
 from datasets import load_dataset
+from huggingface_hub import HfApi, create_repo
 from peft import LoraConfig
 from transformers import AutoTokenizer
 from trl import SFTConfig, SFTTrainer
@@ -43,6 +44,34 @@ SAVE_STEPS = 25
 EVAL_STEPS = 25
 
 
+def ensure_branch_exists(repo_id, branch_name):
+    """Pre-create branch on HuggingFace Hub to avoid 404 errors."""
+    api = HfApi()
+
+    try:
+        # Ensure repo exists
+        try:
+            api.repo_info(repo_id=repo_id, repo_type="model")
+        except Exception:
+            print(f"Creating repository {repo_id}...")
+            create_repo(repo_id=repo_id, repo_type="model", exist_ok=True)
+
+        # Check if branch exists
+        refs = api.list_repo_refs(repo_id=repo_id, repo_type="model")
+        branches = [ref.name for ref in refs.branches]
+
+        if branch_name in branches:
+            print(f"Branch '{branch_name}' already exists")
+        else:
+            print(f"Creating branch '{branch_name}'...")
+            api.create_branch(repo_id=repo_id, branch=branch_name, repo_type="model")
+            print(f"Branch '{branch_name}' created successfully")
+
+    except Exception as e:
+        print(f"Warning: Could not ensure branch exists: {e}")
+        raise
+
+
 def format_chat_template(example, tokenizer):
     """
     Format the dataset examples using the chat template.
@@ -57,7 +86,7 @@ def main():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_name = f"qwen-crawlerlm-lora-{timestamp}"
 
-    # Generate branch name based on configuration
+    # Branch name for this run
     branch_name = f"seq{MAX_SEQ_LENGTH}-{timestamp}"
 
     # Configure Trackio for experiment tracking
@@ -66,7 +95,11 @@ def main():
 
     print(f"Run name: {run_name}")
     print(f"Hub model ID: {HF_HUB_MODEL_ID}")
-    print(f"Hub branch: {branch_name}")
+    print(f"Branch name: {branch_name}")
+
+    # Pre-create branch to avoid 404 errors during training
+    print("\nEnsuring Hub branch exists...")
+    ensure_branch_exists(HF_HUB_MODEL_ID, branch_name)
     print(f"Model: {MODEL_NAME}")
     print(f"Dataset: {DATASET_NAME}")
     print(f"Output: {OUTPUT_DIR}")
@@ -157,9 +190,10 @@ def main():
     tokenizer.save_pretrained(OUTPUT_DIR)
 
     print("\nLoRA fine-tuning complete!")
-    print(f"LoRA adapters saved to: {OUTPUT_DIR}")
+    print(f"LoRA adapters saved locally to: {OUTPUT_DIR}")
     print(f"Hub model: {HF_HUB_MODEL_ID}")
     print(f"Hub branch: {branch_name}")
+    print(f"View at: https://huggingface.co/{HF_HUB_MODEL_ID}/tree/{branch_name}")
 
 
 if __name__ == "__main__":

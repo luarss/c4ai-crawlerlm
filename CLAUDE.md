@@ -232,8 +232,8 @@ This project implements Task A from the problem statement:
 - Programmatic synthetic variations to reach 5k examples
 - Stable JSON schema (Exa format with 8 required fields)
 - Train/val/test splits with proper data leakage prevention
-- `hf jobs uv run --flavor t4-small --secrets HF_TOKEN scripts/06_finetune.py`
-- `hf jobs uv run --flavor t4-small --secrets HF_TOKEN scripts/07_evaluate.py`
+- `hf jobs uv run --flavor t4-small|t4-medium --secrets HF_TOKEN scripts/06_finetune.py`
+- `hf jobs uv run --flavor t4-small|t4-medium --secrets HF_TOKEN scripts/07_evaluate.py`
 
 **Next phases**:
 - Task B: Fine-tune a small model (e.g., Qwen 0.6B) using HuggingFace training pipeline
