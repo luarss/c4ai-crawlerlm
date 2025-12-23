@@ -112,7 +112,7 @@ function autoExtractFields(htmlString, fragmentType) {
 
   // Type-specific extraction
   switch (fragmentType) {
-    case 'recipe':
+    case 'recipe': {
       if (titleText) extracted.name = titleText;
 
       // Extract ingredients from lists
@@ -143,8 +143,9 @@ function autoExtractFields(htmlString, fragmentType) {
       }
 
       break;
+    }
 
-    case 'event':
+    case 'event': {
       if (titleText) extracted.title = titleText;
 
       // Extract datetime
@@ -172,8 +173,9 @@ function autoExtractFields(htmlString, fragmentType) {
       if (eventDesc && eventDesc.length > 20) extracted.description = eventDesc;
 
       break;
+    }
 
-    case 'pricing_table':
+    case 'pricing_table': {
       // Extract plan names from headers
       const planNames = getAllText('h2, h3, .plan-name, .tier-name');
       if (planNames.length > 0 && planNames.length <= 5) {
@@ -184,8 +186,9 @@ function autoExtractFields(htmlString, fragmentType) {
         }));
       }
       break;
+    }
 
-    case 'job_posting':
+    case 'job_posting': {
       if (titleText) extracted.title = titleText;
 
       // Extract company name
@@ -205,8 +208,9 @@ function autoExtractFields(htmlString, fragmentType) {
                      getFirstText('[itemprop="description"]');
       if (jobDesc && jobDesc.length > 50) extracted.description = jobDesc;
       break;
+    }
 
-    case 'person':
+    case 'person': {
       if (titleText) extracted.name = titleText;
 
       // Extract job title
@@ -234,8 +238,9 @@ function autoExtractFields(htmlString, fragmentType) {
       if (bioText && bioText.length > 30) extracted.bio = bioText;
 
       break;
+    }
 
-    case 'error_page':
+    case 'error_page': {
       // Extract error code
       const errorCodeMatch = doc.body.textContent.match(/\b(404|500|503|502|403|429)\b/);
       if (errorCodeMatch) extracted.error_code = parseInt(errorCodeMatch[0]);
@@ -245,15 +250,17 @@ function autoExtractFields(htmlString, fragmentType) {
       const errorDesc = getFirstText('p');
       if (errorDesc) extracted.description = errorDesc;
       break;
+    }
 
-    case 'auth_required':
+    case 'auth_required': {
       if (titleText) extracted.message = titleText;
 
       const authDesc = getFirstText('p');
       if (authDesc) extracted.description = authDesc;
       break;
+    }
 
-    case 'empty_shell':
+    case 'empty_shell': {
       // Detect framework
       if (htmlString.includes('__next') || htmlString.includes('_reactRoot')) {
         extracted.framework = 'react';
@@ -263,6 +270,7 @@ function autoExtractFields(htmlString, fragmentType) {
         extracted.framework = 'angular';
       }
       break;
+    }
 
     default:
       // No extraction for unknown types
